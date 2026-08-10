@@ -2,7 +2,15 @@ import './style.css';
 import { VrmController } from './vrmController';
 import { parseDirectorCommand } from './commandParser';
 import { ChatEngine } from './chatEngine';
-import { deleteCharacter, listCharacters, saveCharacter, storedCharacterToFile, type StoredCharacter } from './characterStore';
+import {
+  deleteCharacter,
+  listCharacters,
+  saveCharacter,
+  storedCharacterToFile,
+  type CharacterKind,
+  type StoredCharacter,
+} from './characterStore';
+import { stylizePhoto, type AnimeStyle } from './photoStudio';
 import type { ChatSettings } from './types';
 
 const app = document.querySelector<HTMLDivElement>('#app');
@@ -20,11 +28,15 @@ app.innerHTML = `
 
     <section class="stage-card">
       <div id="stage" class="stage">
+        <img id="photoAvatar" class="photo-avatar hidden" alt="Photo character" />
         <div id="stageEmpty" class="empty-stage">
           <div class="orb">A</div>
           <strong>No character loaded</strong>
-          <span>Import a VRM anime character from your phone.</span>
-          <button id="stageImport" class="primary">Import VRM</button>
+          <span>Import a VRM or turn a photo into an anime-style character.</span>
+          <div class="stage-actions">
+            <button id="stagePhoto" class="primary">Photo → Anime</button>
+            <button id="stageImport" class="secondary">Import VRM</button>
+          </div>
         </div>
       </div>
       <div class="stage-overlay">
@@ -35,18 +47,43 @@ app.innerHTML = `
 
     <section id="panel-character" class="panel active">
       <div class="section-heading">
-        <div><h2>Characters</h2><p>Import once, then switch instantly.</p></div>
-        <button id="importCharacter" class="secondary">Import</button>
+        <div><h2>Characters</h2><p>Create from a photo or import a full 3D VRM.</p></div>
+        <div class="heading-actions">
+          <button id="photoCharacter" class="secondary">Photo → Anime</button>
+          <button id="importCharacter" class="secondary">VRM</button>
+        </div>
       </div>
+
+      <div id="photoStudio" class="photo-studio hidden">
+        <div class="photo-preview-wrap"><img id="photoPreview" alt="Selected person" /></div>
+        <div class="photo-studio-controls">
+          <label>Anime look
+            <select id="animeStyle">
+              <option value="soft">Soft anime</option>
+              <option value="cel" selected>Cel shaded</option>
+              <option value="manga">Manga</option>
+            </select>
+          </label>
+          <label>Character name<input id="photoCharacterName" placeholder="Character name" /></label>
+          <div class="photo-studio-actions">
+            <button id="cancelPhoto" class="secondary" type="button">Cancel</button>
+            <button id="generateAnime" class="primary" type="button">Create anime character</button>
+          </div>
+        </div>
+        <div class="mini-note">The built-in converter runs locally on your phone. It creates a stylized 2D avatar without uploading the original photo.</div>
+      </div>
+
       <div id="characterList" class="character-list"></div>
-      <div class="mini-note">Use VRM models you own or have permission to use. Imported models stay on this device.</div>
+      <div class="mini-note">VRM characters support precise body/bone control. Photo characters support whole-avatar motion; a flat photo cannot provide independent arm/leg bones without rigging.</div>
     </section>
 
     <section id="panel-director" class="panel">
       <div class="section-heading">
-        <div><h2>Director</h2><p>Exact commands override chat behaviour.</p></div>
+        <div><h2>Director</h2><p>Exact commands run separately from chat behaviour.</p></div>
         <button id="resetPose" class="secondary">Reset</button>
       </div>
+
+      <div id="rigModeNote" class="mode-note">Load a character to enable controls.</div>
 
       <form id="directorForm" class="command-box">
         <textarea id="directorInput" rows="3" placeholder="e.g. raise right arm 45 degrees"></textarea>
@@ -63,7 +100,7 @@ app.innerHTML = `
         <button data-command="reset pose">Neutral</button>
       </div>
 
-      <details open>
+      <details id="boneControls" open>
         <summary>Manual bone control</summary>
         <div class="manual-grid">
           <label>Bone<select id="boneSelect"></select></label>
@@ -72,7 +109,7 @@ app.innerHTML = `
         </div>
       </details>
 
-      <details>
+      <details id="expressionControls">
         <summary>Facial expression</summary>
         <div class="manual-grid">
           <label class="wide">Expression<select id="expressionSelect"></select></label>
@@ -85,9 +122,11 @@ app.innerHTML = `
         <div class="examples">
           <code>rotate right upper arm z 45</code>
           <code>turn head left 25 degrees</code>
-          <code>look up 15 degrees</code>
           <code>bend left elbow 70 degrees</code>
           <code>set happy 0.8</code>
+          <code>photo: tilt left 15</code>
+          <code>photo: move right 40</code>
+          <code>photo: zoom 125</code>
         </div>
       </details>
     </section>
@@ -116,7 +155,7 @@ app.innerHTML = `
         <label class="wide">API key<input id="apiKey" type="password" placeholder="Optional for local endpoints" /></label>
       </div>
       <button id="saveSettings" class="primary full">Save settings</button>
-      <div class="mini-note">Manual Director commands never depend on the AI endpoint. Endpoint credentials are stored locally on this device in this first build.</div>
+      <div class="mini-note">Director commands never depend on the conversational AI endpoint. Endpoint credentials are stored locally on this device in this first build.</div>
     </section>
 
     <nav class="bottom-nav">
@@ -127,6 +166,7 @@ app.innerHTML = `
     </nav>
 
     <input id="vrmInput" type="file" accept=".vrm,model/gltf-binary" hidden />
+    <input id="photoInput" type="file" accept="image/*" hidden />
   </main>
 `;
 
@@ -138,12 +178,21 @@ const $ = <T extends HTMLElement>(selector: string) => {
 
 const stage = $('#stage');
 const stageEmpty = $('#stageEmpty');
+const photoAvatar = $<HTMLImageElement>('#photoAvatar');
 const activeCharacter = $('#activeCharacter');
 const statusPill = $('#statusPill');
 const vrmInput = $<HTMLInputElement>('#vrmInput');
+const photoInput = $<HTMLInputElement>('#photoInput');
 const characterList = $('#characterList');
+const photoStudio = $('#photoStudio');
+const photoPreview = $<HTMLImageElement>('#photoPreview');
+const animeStyle = $<HTMLSelectElement>('#animeStyle');
+const photoCharacterName = $<HTMLInputElement>('#photoCharacterName');
 const directorInput = $<HTMLTextAreaElement>('#directorInput');
 const directorResult = $('#directorResult');
+const rigModeNote = $('#rigModeNote');
+const boneControls = $<HTMLDetailsElement>('#boneControls');
+const expressionControls = $<HTMLDetailsElement>('#expressionControls');
 const boneSelect = $<HTMLSelectElement>('#boneSelect');
 const axisSelect = $<HTMLSelectElement>('#axisSelect');
 const angleRange = $<HTMLInputElement>('#angleRange');
@@ -156,7 +205,15 @@ const chatInput = $<HTMLInputElement>('#chatInput');
 
 const SETTINGS_KEY = 'anicontroller-settings-v1';
 let currentCharacterId = '';
+let currentCharacterKind: CharacterKind | null = null;
 let characters: StoredCharacter[] = [];
+let selectedPhotoFile: File | null = null;
+let photoPreviewUrl = '';
+let photoAvatarUrl = '';
+let photoRotation = 0;
+let photoScale = 1;
+let photoX = 0;
+let photoY = 0;
 const controller = new VrmController(stage);
 
 function defaultSettings(): ChatSettings {
@@ -214,31 +271,102 @@ function escapeHtml(value: string): string {
   return value.replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char] || char);
 }
 
+function setRigControlAvailability(enabled: boolean): void {
+  boneSelect.disabled = !enabled;
+  axisSelect.disabled = !enabled;
+  angleRange.disabled = !enabled;
+  expressionSelect.disabled = !enabled;
+  expressionRange.disabled = !enabled;
+  boneControls.classList.toggle('disabled-control', !enabled);
+  expressionControls.classList.toggle('disabled-control', !enabled);
+}
+
 function refreshRigControls(): void {
-  setOptions(boneSelect, controller.listBones(), 'Load a VRM first');
-  setOptions(expressionSelect, controller.listExpressions(), 'No expressions found');
+  if (currentCharacterKind !== 'vrm') {
+    setOptions(boneSelect, [], '3D VRM required');
+    setOptions(expressionSelect, [], '3D VRM required');
+    setRigControlAvailability(false);
+  } else {
+    setOptions(boneSelect, controller.listBones(), 'No humanoid bones found');
+    setOptions(expressionSelect, controller.listExpressions(), 'No expressions found');
+    setRigControlAvailability(true);
+  }
   angleRange.value = '0';
   expressionRange.value = '0';
   angleValue.textContent = '0°';
   expressionValue.textContent = '0%';
 }
 
+function updateModeNote(): void {
+  if (currentCharacterKind === 'vrm') {
+    rigModeNote.textContent = '3D VRM mode — exact bone, pose, expression and camera controls are enabled.';
+  } else if (currentCharacterKind === 'image') {
+    rigModeNote.textContent = '2D photo-avatar mode — tilt, move, zoom, shake, nod and whole-avatar motion are enabled. Independent limbs require a rigged VRM.';
+  } else {
+    rigModeNote.textContent = 'Load a character to enable controls.';
+  }
+}
+
+function applyPhotoTransform(): void {
+  photoAvatar.style.transform = `translate(${photoX}px, ${photoY}px) rotate(${photoRotation}deg) scale(${photoScale})`;
+}
+
+function resetPhotoPose(): void {
+  photoRotation = 0;
+  photoScale = 1;
+  photoX = 0;
+  photoY = 0;
+  applyPhotoTransform();
+}
+
+function showPhotoBlob(blob: Blob): void {
+  if (photoAvatarUrl) URL.revokeObjectURL(photoAvatarUrl);
+  photoAvatarUrl = URL.createObjectURL(blob);
+  photoAvatar.src = photoAvatarUrl;
+  photoAvatar.classList.remove('hidden');
+  controller.setVisible(false);
+  resetPhotoPose();
+}
+
+function hidePhotoAvatar(): void {
+  photoAvatar.classList.add('hidden');
+  if (photoAvatarUrl) {
+    URL.revokeObjectURL(photoAvatarUrl);
+    photoAvatarUrl = '';
+  }
+  photoAvatar.removeAttribute('src');
+}
+
 async function loadCharacter(item: StoredCharacter): Promise<void> {
   setStatus('Loading…', true);
   try {
-    const displayName = await controller.loadFile(storedCharacterToFile(item));
+    const kind = item.kind ?? 'vrm';
     currentCharacterId = item.id;
-    activeCharacter.textContent = displayName || item.name;
-    stageEmpty.classList.add('hidden');
+    currentCharacterKind = kind;
+
+    if (kind === 'image') {
+      showPhotoBlob(item.blob);
+      activeCharacter.textContent = item.name;
+      stageEmpty.classList.add('hidden');
+    } else {
+      hidePhotoAvatar();
+      controller.setVisible(true);
+      const displayName = await controller.loadFile(storedCharacterToFile(item));
+      activeCharacter.textContent = displayName || item.name;
+      stageEmpty.classList.add('hidden');
+    }
+
     const settings = readSettings();
     if (!settings.characterName) {
-      settings.characterName = displayName || item.name;
+      settings.characterName = item.name;
       localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
       fillSettings();
     }
+
     refreshRigControls();
+    updateModeNote();
     renderCharacterList();
-    setStatus('Loaded');
+    setStatus(kind === 'image' ? 'Photo avatar' : '3D loaded');
   } catch (error) {
     setStatus('Load failed');
     directorResult.textContent = error instanceof Error ? error.message : 'Could not load this character.';
@@ -248,14 +376,12 @@ async function loadCharacter(item: StoredCharacter): Promise<void> {
 async function importCharacter(file: File): Promise<void> {
   setStatus('Importing…', true);
   try {
+    hidePhotoAvatar();
+    controller.setVisible(true);
     const displayName = await controller.loadFile(file);
-    const stored = await saveCharacter(displayName || file.name.replace(/\.vrm$/i, ''), file);
-    currentCharacterId = stored.id;
-    activeCharacter.textContent = stored.name;
-    stageEmpty.classList.add('hidden');
+    const stored = await saveCharacter(displayName || file.name.replace(/\.vrm$/i, ''), file, 'vrm');
     characters = await listCharacters();
-    refreshRigControls();
-    renderCharacterList();
+    await loadCharacter(stored);
     setStatus('Imported');
   } catch (error) {
     setStatus('Import failed');
@@ -265,19 +391,27 @@ async function importCharacter(file: File): Promise<void> {
 
 function renderCharacterList(): void {
   if (!characters.length) {
-    characterList.innerHTML = `<button id="emptyImport" class="character-empty"><span class="avatar-chip">＋</span><span><strong>Import your first character</strong><small>VRM 0.x or VRM 1.0</small></span></button>`;
+    characterList.innerHTML = `
+      <div class="empty-character-grid">
+        <button id="emptyPhoto" class="character-empty"><span class="avatar-chip">✦</span><span><strong>Create from a photo</strong><small>Local anime-style 2D avatar</small></span></button>
+        <button id="emptyImport" class="character-empty"><span class="avatar-chip">＋</span><span><strong>Import a 3D character</strong><small>VRM 0.x or VRM 1.0</small></span></button>
+      </div>`;
+    document.querySelector('#emptyPhoto')?.addEventListener('click', () => photoInput.click());
     document.querySelector('#emptyImport')?.addEventListener('click', () => vrmInput.click());
     return;
   }
 
-  characterList.innerHTML = characters.map((item) => `
-    <div class="character-row ${item.id === currentCharacterId ? 'selected' : ''}" data-id="${item.id}">
-      <button class="character-main" data-load="${item.id}">
-        <span class="avatar-chip">${escapeHtml(item.name.slice(0, 1).toUpperCase())}</span>
-        <span><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.fileName)}</small></span>
-      </button>
-      <button class="delete-character" data-delete="${item.id}" aria-label="Delete ${escapeHtml(item.name)}">×</button>
-    </div>`).join('');
+  characterList.innerHTML = characters.map((item) => {
+    const kind = item.kind ?? 'vrm';
+    return `
+      <div class="character-row ${item.id === currentCharacterId ? 'selected' : ''}" data-id="${item.id}">
+        <button class="character-main" data-load="${item.id}">
+          <span class="avatar-chip">${kind === 'image' ? '✦' : escapeHtml(item.name.slice(0, 1).toUpperCase())}</span>
+          <span><strong>${escapeHtml(item.name)}</strong><small>${kind === 'image' ? '2D anime photo' : '3D VRM'} · ${escapeHtml(item.fileName)}</small></span>
+        </button>
+        <button class="delete-character" data-delete="${item.id}" aria-label="Delete ${escapeHtml(item.name)}">×</button>
+      </div>`;
+  }).join('');
 
   characterList.querySelectorAll<HTMLButtonElement>('[data-load]').forEach((button) => {
     button.addEventListener('click', () => {
@@ -291,16 +425,153 @@ function renderCharacterList(): void {
       const id = button.dataset.delete || '';
       await deleteCharacter(id);
       characters = await listCharacters();
-      if (currentCharacterId === id) currentCharacterId = '';
+      if (currentCharacterId === id) {
+        currentCharacterId = '';
+        currentCharacterKind = null;
+        hidePhotoAvatar();
+        controller.setVisible(false);
+        stageEmpty.classList.remove('hidden');
+        activeCharacter.textContent = 'No character';
+        refreshRigControls();
+        updateModeNote();
+      }
       renderCharacterList();
     });
   });
 }
 
+function openPhotoStudio(file: File): void {
+  selectedPhotoFile = file;
+  if (photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl);
+  photoPreviewUrl = URL.createObjectURL(file);
+  photoPreview.src = photoPreviewUrl;
+  photoCharacterName.value = file.name.replace(/\.[^.]+$/, '') || 'Anime Character';
+  photoStudio.classList.remove('hidden');
+  switchPanel('character');
+  photoStudio.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function closePhotoStudio(): void {
+  selectedPhotoFile = null;
+  photoStudio.classList.add('hidden');
+  if (photoPreviewUrl) {
+    URL.revokeObjectURL(photoPreviewUrl);
+    photoPreviewUrl = '';
+  }
+  photoPreview.removeAttribute('src');
+}
+
+async function createAnimeCharacter(): Promise<void> {
+  if (!selectedPhotoFile) return;
+  setStatus('Creating anime…', true);
+  const button = $<HTMLButtonElement>('#generateAnime');
+  button.disabled = true;
+  try {
+    const style = animeStyle.value as AnimeStyle;
+    const result = await stylizePhoto(selectedPhotoFile, style);
+    const name = photoCharacterName.value.trim() || result.name.replace(/\.[^.]+$/, '');
+    const stored = await saveCharacter(name, result, 'image');
+    characters = await listCharacters();
+    closePhotoStudio();
+    await loadCharacter(stored);
+    setStatus('Anime created');
+  } catch (error) {
+    setStatus('Create failed');
+    directorResult.textContent = error instanceof Error ? error.message : 'Could not create the anime image.';
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function numberFrom(text: string, fallback: number): number {
+  const match = text.match(/-?\d+(?:\.\d+)?/);
+  return match ? Number(match[0]) : fallback;
+}
+
+function playPhotoAnimation(name: 'bounce' | 'shake' | 'nod'): void {
+  photoAvatar.classList.remove('photo-bounce', 'photo-shake', 'photo-nod');
+  void photoAvatar.offsetWidth;
+  photoAvatar.classList.add(`photo-${name}`);
+  window.setTimeout(() => photoAvatar.classList.remove(`photo-${name}`), 900);
+}
+
+function executePhotoDirector(text: string): void {
+  const command = text.toLowerCase().replace(/°/g, ' degrees').trim();
+
+  if (/^(reset|reset pose|neutral|neutral pose)$/.test(command)) {
+    resetPhotoPose();
+    directorResult.textContent = '2D avatar reset.';
+    return;
+  }
+
+  if (command.includes('camera') || command.includes('zoom')) {
+    if (command.includes('close')) photoScale = 1.35;
+    else if (command.includes('full')) photoScale = 0.9;
+    else if (command.includes('front')) photoScale = 1.08;
+    else photoScale = Math.max(0.5, Math.min(2.5, Math.abs(numberFrom(command, 100)) / 100));
+    applyPhotoTransform();
+    directorResult.textContent = `2D avatar zoom set to ${Math.round(photoScale * 100)}%.`;
+    return;
+  }
+
+  if (command.includes('tilt') || command.startsWith('rotate')) {
+    const amount = Math.max(0, Math.min(60, Math.abs(numberFrom(command, 15))));
+    if (command.includes('left')) photoRotation = -amount;
+    else if (command.includes('right')) photoRotation = amount;
+    else photoRotation = Math.max(-60, Math.min(60, numberFrom(command, 0)));
+    applyPhotoTransform();
+    directorResult.textContent = `2D avatar tilt set to ${photoRotation}°.`;
+    return;
+  }
+
+  if (command.includes('move')) {
+    const amount = Math.max(0, Math.min(240, Math.abs(numberFrom(command, 30))));
+    if (command.includes('left')) photoX -= amount;
+    if (command.includes('right')) photoX += amount;
+    if (command.includes('up')) photoY -= amount;
+    if (command.includes('down')) photoY += amount;
+    applyPhotoTransform();
+    directorResult.textContent = `2D avatar moved to X ${photoX}px, Y ${photoY}px.`;
+    return;
+  }
+
+  if (command.includes('bounce') || command.includes('jump')) {
+    playPhotoAnimation('bounce');
+    directorResult.textContent = '2D avatar bounce played.';
+    return;
+  }
+
+  if (command.includes('shake')) {
+    playPhotoAnimation('shake');
+    directorResult.textContent = '2D avatar shake played.';
+    return;
+  }
+
+  if (command.includes('nod')) {
+    playPhotoAnimation('nod');
+    directorResult.textContent = '2D avatar nod played.';
+    return;
+  }
+
+  if (command.includes('wave') || command.includes('arm') || command.includes('leg') || command.includes('elbow') || command.includes('hand')) {
+    directorResult.textContent = 'This is a flat 2D photo avatar, so it has no separate limb bones. Import or generate a rigged VRM for exact arm/leg movement.';
+    return;
+  }
+
+  directorResult.textContent = '2D commands: tilt left/right, move left/right/up/down, zoom 125, bounce, shake, nod, reset pose.';
+}
+
 async function executeDirector(text: string): Promise<void> {
-  if (!controller.hasCharacter()) {
+  if (!currentCharacterKind) {
     directorResult.textContent = 'Load a character first.';
     switchPanel('character');
+    return;
+  }
+
+  if (currentCharacterKind === 'image') {
+    setStatus('Executing…', true);
+    executePhotoDirector(text);
+    setStatus('Ready');
     return;
   }
 
@@ -318,6 +589,7 @@ async function executeDirector(text: string): Promise<void> {
 }
 
 function refreshBoneSlider(): void {
+  if (currentCharacterKind !== 'vrm') return;
   const bone = boneSelect.value;
   if (!bone) return;
   const rotation = controller.getBoneRotation(bone);
@@ -344,12 +616,22 @@ function switchPanel(name: string): void {
 
 document.querySelectorAll<HTMLElement>('.nav-item').forEach((button) => button.addEventListener('click', () => switchPanel(button.dataset.panel || 'character')));
 ['#importTop', '#stageImport', '#importCharacter'].forEach((selector) => $(selector).addEventListener('click', () => vrmInput.click()));
+['#stagePhoto', '#photoCharacter'].forEach((selector) => $(selector).addEventListener('click', () => photoInput.click()));
 
 vrmInput.addEventListener('change', () => {
   const file = vrmInput.files?.[0];
   if (file) void importCharacter(file);
   vrmInput.value = '';
 });
+
+photoInput.addEventListener('change', () => {
+  const file = photoInput.files?.[0];
+  if (file) openPhotoStudio(file);
+  photoInput.value = '';
+});
+
+$('#cancelPhoto').addEventListener('click', closePhotoStudio);
+$('#generateAnime').addEventListener('click', () => void createAnimeCharacter());
 
 $('#directorForm').addEventListener('submit', (event) => {
   event.preventDefault();
@@ -367,11 +649,13 @@ $('#resetPose').addEventListener('click', () => void executeDirector('reset pose
 boneSelect.addEventListener('change', refreshBoneSlider);
 axisSelect.addEventListener('change', refreshBoneSlider);
 angleRange.addEventListener('input', () => {
+  if (currentCharacterKind !== 'vrm') return;
   const value = Number(angleRange.value);
   angleValue.textContent = `${value}°`;
   if (boneSelect.value) controller.setBoneRotation(boneSelect.value, axisSelect.value as 'x' | 'y' | 'z', value);
 });
 expressionRange.addEventListener('input', () => {
+  if (currentCharacterKind !== 'vrm') return;
   const value = Number(expressionRange.value);
   expressionValue.textContent = `${value}%`;
   if (expressionSelect.value) controller.setExpression(expressionSelect.value, value / 100);
@@ -409,9 +693,11 @@ $('#saveSettings').addEventListener('click', () => {
 });
 
 async function start(): Promise<void> {
+  controller.setVisible(false);
   characters = await listCharacters();
   renderCharacterList();
   refreshRigControls();
+  updateModeNote();
 }
 
 void start();
