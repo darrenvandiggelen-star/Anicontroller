@@ -101,7 +101,8 @@ export class VrmController {
       this.setCameraPreset('full');
       this.setVisible(true);
 
-      const metaName = typeof vrm.meta?.name === 'string' ? vrm.meta.name : '';
+      const meta = vrm.meta as unknown as { name?: unknown };
+      const metaName = typeof meta.name === 'string' ? meta.name : '';
       return metaName || file.name.replace(/\.vrm$/i, '');
     } finally {
       URL.revokeObjectURL(url);
