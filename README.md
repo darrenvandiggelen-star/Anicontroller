@@ -2,68 +2,68 @@
 
 Anicontroller is an Android-first live virtual anime character controller.
 
-The app separates **character control** from **chat intelligence**:
+The app separates **character control** from **chat intelligence**. Director commands execute against the active rig, while chat can use a local or user-selected AI endpoint.
 
-- The Director executes explicit user movement, pose, expression and camera commands directly.
-- Chat can use a local or user-selected AI endpoint without owning the animation layer.
-- VRM characters can be loaded from Android storage.
-- A person photo can be converted locally into an anime-style 2D character.
-- Character bones can be rotated precisely with sliders or typed commands when using a VRM.
-- Expressions can be set with exact weights on compatible VRM characters.
-- GitHub Actions builds a debug APK from `main`.
+## Face → Real 3D
 
-## Character modes
+The Face → Real 3D workflow no longer pastes a photograph onto a generic head. It uses MediaPipe Face Landmarker to detect facial landmarks and derive measurable proportions for a parametric 3D head, including face aspect, jaw width, eye spacing/size, nose proportions, mouth proportions and forehead proportions. Skin and hair base colors are sampled locally from the photo.
 
-### 3D VRM
+A face photo cannot reveal the person's true body measurements. Anicontroller therefore supports two body paths:
 
-Use VRM 0.x / VRM 1.0 characters for full rig control. The Director can directly control humanoid bones, expressions, camera position and supported gestures.
+1. Add an optional standing full-body photo. MediaPipe Pose Landmarker estimates shoulder/hip ratio plus arm and leg proportions.
+2. Adjust height, shoulders, chest, waist, hips, arm length, leg length and overall build manually before creating the avatar.
 
-Example commands:
+The resulting avatar has a separate full-body joint hierarchy for hips, spine, chest, neck, head, shoulders, arms, hands, thighs, lower legs and feet.
+
+The default/reset pose is lying on the bed.
+
+Example Director commands:
 
 ```text
-raise right arm 45 degrees
-rotate left upper arm x 25
-turn head left 20 degrees
-look up 15 degrees
+lie on bed
+sit on bed then turn head left 20
+stand up
+roll left
+raise right arm 60
+rotate left upper leg x 45 then bend left elbow 70
 smile 80
-set happy 0.7
-reset pose
-camera front
-camera close
+blink 100
 ```
 
-### Photo → Anime
+## Wardrobe
 
-Choose a photo from the Android device and create a stylized 2D character locally. The original image is not uploaded by the built-in converter.
+Clothes are separate 3D meshes attached to the moving rig rather than baked into the body. Current wardrobe categories include:
 
-Built-in looks:
+- Tops: t-shirt, tank, hoodie, jacket, bodysuit
+- Bottoms: jeans, shorts, skirt, leggings
+- Shoes: sneakers, boots, barefoot
+- Independent top, bottom and shoe colors
 
-- Soft Anime
-- Cel Shaded
-- Manga
-
-Photo characters support whole-avatar commands such as:
+Wardrobe changes can be made from the controls or through Director commands:
 
 ```text
-tilt left 15
-move right 40
-move up 25
-zoom 125
-bounce
-shake
-nod
-reset pose
+wear black hoodie
+wear blue jeans then sit on bed
+change bottom to shorts
+wear white sneakers
+remove shoes
 ```
 
-A single flat photograph cannot provide independent arm, leg, hand or facial bones. Exact limb control requires a rigged VRM character.
+## 3D VRM
+
+VRM 0.x / VRM 1.0 import remains available for externally created characters. Compatible VRMs support humanoid bone control, expressions, camera position and gestures.
+
+## Photo → Anime 2D
+
+The older local photo stylizer remains available for quick 2D avatars with Soft Anime, Cel Shaded and Manga looks.
 
 ## Live chat
 
-The chat panel includes a local fallback and can be connected to a user-selected OpenAI-compatible endpoint. The conversational AI is kept separate from the Director so it does not own or veto animation controls.
+The chat panel includes a local fallback and can connect to a user-selected OpenAI-compatible endpoint. Chat remains separate from the Director animation layer.
 
 ## Character library
 
-Imported VRMs and generated photo characters are stored in the app's local IndexedDB character library so they can be selected again without re-importing every session.
+Imported VRMs, generated 2D characters and Face → Real 3D profiles are stored locally in IndexedDB.
 
 ## Development
 
@@ -74,7 +74,7 @@ npm install
 npm run dev
 ```
 
-Create/sync the Android project locally:
+Create/sync Android locally:
 
 ```bash
 npm run build
@@ -85,22 +85,23 @@ npx cap open android
 
 ## GitHub APK build
 
-Open **Actions → Build Android APK** after a successful push. Download the `anicontroller-debug-apk` artifact from the completed workflow run.
+GitHub Actions builds a debug APK from `main`. Open **Actions → Build Android APK** and download the `anicontroller-debug-apk` artifact from a successful run.
 
-## Characters and rights
+## Notes
 
-Anicontroller does not redistribute copyrighted anime character models. Use VRM models and photographs you own, created, licensed, or otherwise have permission to use.
+MediaPipe image inference runs on the device. The WebAssembly runtime and model files are downloaded when the landmark scanner is first used, so the first Face → Real 3D scan needs network access unless those model assets are bundled into a future build.
+
+Use photographs and character assets you own or have permission to use.
 
 ## Roadmap
 
-- Higher-quality optional AI image stylization provider
-- Photo-to-rigged-avatar workflow
-- Saved pose presets
-- VRMA/custom animation import
-- Keyframe timeline
+- Bundle MediaPipe model files for fully offline first-run scanning
+- Dense 3D morphable face mesh / higher-fidelity likeness
+- Optional full-body segmentation for more detailed silhouette fitting
+- Hair style generator and editor
+- Larger modular wardrobe library
+- Saved pose presets and keyframe timeline
 - Android speech recognition and TTS
 - Lip sync and emotion-driven facial animation
-- Local on-device LLM option
 - Motion recording and playback
-- Scene/background selection
 - Touch/drag inverse-kinematics controls
