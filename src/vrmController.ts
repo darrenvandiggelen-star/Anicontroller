@@ -7,6 +7,15 @@ import type { DirectorAction } from './types';
 
 const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
+const STANDARD_BONES: VRMHumanBoneName[] = [
+  'hips', 'spine', 'chest', 'upperChest', 'neck', 'head',
+  'leftShoulder', 'leftUpperArm', 'leftLowerArm', 'leftHand',
+  'rightShoulder', 'rightUpperArm', 'rightLowerArm', 'rightHand',
+  'leftUpperLeg', 'leftLowerLeg', 'leftFoot', 'leftToes',
+  'rightUpperLeg', 'rightLowerLeg', 'rightFoot', 'rightToes',
+  'leftEye', 'rightEye', 'jaw',
+];
+
 export class VrmController {
   private renderer: THREE.WebGLRenderer;
   private scene = new THREE.Scene();
@@ -26,6 +35,7 @@ export class VrmController {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.renderer.setSize(container.clientWidth, container.clientHeight, false);
     this.renderer.setAnimationLoop(() => this.render());
+    this.renderer.domElement.classList.add('vrm-canvas');
     container.appendChild(this.renderer.domElement);
 
     this.camera = new THREE.PerspectiveCamera(30, 1, 0.01, 100);
@@ -61,6 +71,10 @@ export class VrmController {
     this.resize();
   }
 
+  setVisible(visible: boolean): void {
+    this.renderer.domElement.style.display = visible ? 'block' : 'none';
+  }
+
   async loadFile(file: File): Promise<string> {
     const url = URL.createObjectURL(file);
     const loader = new GLTFLoader();
@@ -85,6 +99,7 @@ export class VrmController {
       this.scene.add(this.currentVrm.scene);
       this.resetPose();
       this.setCameraPreset('full');
+      this.setVisible(true);
 
       const metaName = typeof vrm.meta?.name === 'string' ? vrm.meta.name : '';
       return metaName || file.name.replace(/\.vrm$/i, '');
@@ -99,12 +114,13 @@ export class VrmController {
 
   listBones(): string[] {
     if (!this.currentVrm) return [];
-    return Object.keys(this.currentVrm.humanoid.normalizedHumanBones).sort();
+    return STANDARD_BONES.filter((bone) => this.currentVrm?.humanoid.getNormalizedBoneNode(bone));
   }
 
   listExpressions(): string[] {
-    if (!this.currentVrm?.expressionManager) return [];
-    return this.currentVrm.expressionManager.expressions.map((expression) => expression.expressionName).sort();
+    const manager = this.currentVrm?.expressionManager;
+    if (!manager) return [];
+    return manager.expressions.map((expression) => expression.expressionName).sort();
   }
 
   setBoneRotation(bone: string, axis: 'x' | 'y' | 'z', degrees: number): boolean {
