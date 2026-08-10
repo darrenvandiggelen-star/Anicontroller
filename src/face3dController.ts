@@ -1,10 +1,32 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import type { DirectorAction } from './types';
+import type { BodyProfile, FaceProfile } from './avatarAnalysis';
+
+export type TopGarment = 'tshirt' | 'tank' | 'hoodie' | 'jacket' | 'bodysuit';
+export type BottomGarment = 'jeans' | 'shorts' | 'skirt' | 'leggings';
+export type ShoeGarment = 'sneakers' | 'boots' | 'barefoot';
+
+export interface OutfitProfile {
+  top: TopGarment;
+  bottom: BottomGarment;
+  shoes: ShoeGarment;
+  topColor: string;
+  bottomColor: string;
+  shoeColor: string;
+}
+
+export const DEFAULT_OUTFIT: OutfitProfile = {
+  top: 'tshirt',
+  bottom: 'jeans',
+  shoes: 'sneakers',
+  topColor: '#6f66ff',
+  bottomColor: '#24283a',
+  shoeColor: '#f2f2f4',
+};
 
 const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
-
-const FACE_BONES = [
+const BONE_NAMES = [
   'hips', 'spine', 'chest', 'upperChest', 'neck', 'head',
   'leftShoulder', 'leftUpperArm', 'leftLowerArm', 'leftHand',
   'rightShoulder', 'rightUpperArm', 'rightLowerArm', 'rightHand',
@@ -12,63 +34,27 @@ const FACE_BONES = [
   'rightUpperLeg', 'rightLowerLeg', 'rightFoot',
 ];
 
-function makeMaterial(color: number, roughness = 0.72): THREE.MeshStandardMaterial {
-  return new THREE.MeshStandardMaterial({ color, roughness, metalness: 0.02 });
+function mat(color: string | number, roughness = 0.68): THREE.MeshStandardMaterial {
+  return new THREE.MeshStandardMaterial({ color, roughness, metalness: 0.01 });
 }
 
-function cylinder(length: number, radius: number, material: THREE.Material): THREE.Mesh {
-  const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius * 0.92, length, 18), material);
-  mesh.position.y = -length / 2;
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
-  return mesh;
+function mesh(geometry: THREE.BufferGeometry, material: THREE.Material, cast = true): THREE.Mesh {
+  const result = new THREE.Mesh(geometry, material);
+  result.castShadow = cast;
+  result.receiveShadow = true;
+  return result;
 }
 
-function box(width: number, height: number, depth: number, material: THREE.Material): THREE.Mesh {
-  const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), material);
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
-  return mesh;
+function limb(length: number, radius: number, material: THREE.Material): THREE.Mesh {
+  const part = mesh(new THREE.CapsuleGeometry(radius, Math.max(0.01, length - radius * 2), 6, 14), material);
+  part.position.y = -length / 2;
+  return part;
 }
 
-async function faceTextureFromPhoto(file: Blob): Promise<THREE.CanvasTexture> {
-  const bitmap = await createImageBitmap(file);
-  const canvas = document.createElement('canvas');
-  canvas.width = 512;
-  canvas.height = 640;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('Canvas rendering is not available on this device.');
-
-  const targetRatio = canvas.width / canvas.height;
-  const sourceRatio = bitmap.width / bitmap.height;
-  let sx = 0;
-  let sy = 0;
-  let sw = bitmap.width;
-  let sh = bitmap.height;
-
-  if (sourceRatio > targetRatio) {
-    sw = bitmap.height * targetRatio;
-    sx = (bitmap.width - sw) / 2;
-  } else {
-    sh = bitmap.width / targetRatio;
-    sy = (bitmap.height - sh) / 2;
-  }
-
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.save();
-  ctx.beginPath();
-  ctx.ellipse(canvas.width / 2, canvas.height / 2, canvas.width * 0.47, canvas.height * 0.49, 0, 0, Math.PI * 2);
-  ctx.clip();
-  ctx.drawImage(bitmap, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
-  ctx.restore();
-  bitmap.close();
-
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.minFilter = THREE.LinearFilter;
-  texture.magFilter = THREE.LinearFilter;
-  texture.needsUpdate = true;
-  return texture;
+function roundedPart(width: number, height: number, depth: number, material: THREE.Material): THREE.Mesh {
+  const part = mesh(new THREE.SphereGeometry(0.5, 28, 18), material);
+  part.scale.set(width, height, depth);
+  return part;
 }
 
 export class FaceAvatarController {
@@ -79,51 +65,48 @@ export class FaceAvatarController {
   private root = new THREE.Group();
   private bones = new Map<string, THREE.Group>();
   private resizeObserver: ResizeObserver;
-  private faceTexture: THREE.Texture | null = null;
-  private faceMaterial: THREE.MeshBasicMaterial | null = null;
   private active = false;
   private poseMode: 'bed' | 'stand' | 'sit' = 'bed';
+  private faceProfile: FaceProfile | null = null;
+  private bodyProfile: BodyProfile | null = null;
+  private outfit: OutfitProfile = { ...DEFAULT_OUTFIT };
+  private mouth: THREE.Mesh | null = null;
+  private leftEye: THREE.Mesh | null = null;
+  private rightEye: THREE.Mesh | null = null;
+  private leftBrow: THREE.Mesh | null = null;
+  private rightBrow: THREE.Mesh | null = null;
 
   constructor(private container: HTMLElement) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.renderer.domElement.classList.add('face3d-canvas');
     this.renderer.domElement.style.position = 'absolute';
     this.renderer.domElement.style.inset = '0';
-    this.renderer.domElement.style.zIndex = '2';
-    this.container.appendChild(this.renderer.domElement);
+    this.renderer.domElement.style.zIndex = '3';
+    container.appendChild(this.renderer.domElement);
 
-    this.camera = new THREE.PerspectiveCamera(34, 1, 0.01, 100);
-    this.camera.position.set(0, 2.4, 2.7);
-
+    this.camera = new THREE.PerspectiveCamera(31, 1, 0.01, 100);
+    this.camera.position.set(0, 1.9, 3.2);
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
-    this.controls.enablePan = false;
-    this.controls.minDistance = 0.65;
+    this.controls.minDistance = 0.55;
     this.controls.maxDistance = 7;
-    this.controls.target.set(0, 0.78, -0.75);
+    this.controls.target.set(0, 1.0, 0);
 
-    const hemi = new THREE.HemisphereLight(0xf3f5ff, 0x281c35, 1.7);
-    this.scene.add(hemi);
-
-    const key = new THREE.DirectionalLight(0xffffff, 2.5);
-    key.position.set(2.2, 4.2, 3.1);
+    const key = new THREE.DirectionalLight(0xffffff, 2.8);
+    key.position.set(2.2, 4.2, 3.2);
     key.castShadow = true;
-    key.shadow.mapSize.set(1024, 1024);
     this.scene.add(key);
-
-    const fill = new THREE.DirectionalLight(0x9a86ff, 1.1);
+    const fill = new THREE.DirectionalLight(0x94a0ff, 1.05);
     fill.position.set(-2.5, 2.2, 1.4);
     this.scene.add(fill);
+    this.scene.add(new THREE.HemisphereLight(0xe8edff, 0x171321, 1.35));
 
     this.createRoom();
-    this.createBody();
     this.scene.add(this.root);
-    this.lieOnBed();
-
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(container);
     this.resize();
@@ -131,14 +114,11 @@ export class FaceAvatarController {
     this.setVisible(false);
   }
 
-  async loadFace(file: Blob): Promise<void> {
-    const texture = await faceTextureFromPhoto(file);
-    if (this.faceTexture) this.faceTexture.dispose();
-    this.faceTexture = texture;
-    if (this.faceMaterial) {
-      this.faceMaterial.map = texture;
-      this.faceMaterial.needsUpdate = true;
-    }
+  configure(face: FaceProfile, body: BodyProfile, outfit: OutfitProfile = DEFAULT_OUTFIT): void {
+    this.faceProfile = face;
+    this.bodyProfile = body;
+    this.outfit = { ...outfit };
+    this.rebuildAvatar();
     this.lieOnBed();
     this.setVisible(true);
   }
@@ -148,12 +128,20 @@ export class FaceAvatarController {
     this.renderer.domElement.style.display = visible ? 'block' : 'none';
   }
 
-  isVisible(): boolean {
-    return this.active;
+  isVisible(): boolean { return this.active; }
+  listBones(): string[] { return BONE_NAMES.filter((name) => this.bones.has(name)); }
+  getOutfit(): OutfitProfile { return { ...this.outfit }; }
+
+  updateBodyProfile(body: BodyProfile): void {
+    if (!this.faceProfile) return;
+    this.bodyProfile = body;
+    this.rebuildAvatar();
+    this.lieOnBed();
   }
 
-  listBones(): string[] {
-    return FACE_BONES.filter((name) => this.bones.has(name));
+  setOutfit(next: Partial<OutfitProfile>): void {
+    this.outfit = { ...this.outfit, ...next };
+    this.rebuildWardrobe();
   }
 
   setBoneRotation(bone: string, axis: 'x' | 'y' | 'z', degrees: number): boolean {
@@ -173,22 +161,56 @@ export class FaceAvatarController {
     };
   }
 
+  setExpression(name: string, value: number): boolean {
+    if (!this.mouth || !this.leftEye || !this.rightEye) return false;
+    const v = THREE.MathUtils.clamp(value, 0, 1);
+    this.resetExpressionGeometry();
+    const n = name.toLowerCase();
+    if (n.includes('happy') || n.includes('smile')) {
+      this.mouth.scale.y = 0.45 + v * 0.65;
+      this.mouth.rotation.z = THREE.MathUtils.degToRad(-4 * v);
+      return true;
+    }
+    if (n.includes('surpris')) {
+      this.mouth.scale.y = 1 + v * 2.3;
+      this.mouth.scale.x = 1 - v * 0.25;
+      this.leftEye.scale.y = 1 + v * 0.35;
+      this.rightEye.scale.y = 1 + v * 0.35;
+      return true;
+    }
+    if (n.includes('blink')) {
+      this.leftEye.scale.y = Math.max(0.08, 1 - v * 0.92);
+      this.rightEye.scale.y = Math.max(0.08, 1 - v * 0.92);
+      return true;
+    }
+    if (n.includes('angry')) {
+      if (this.leftBrow) this.leftBrow.rotation.z = -0.24 * v;
+      if (this.rightBrow) this.rightBrow.rotation.z = 0.24 * v;
+      return true;
+    }
+    if (n.includes('sad')) {
+      if (this.leftBrow) this.leftBrow.rotation.z = 0.18 * v;
+      if (this.rightBrow) this.rightBrow.rotation.z = -0.18 * v;
+      this.mouth.rotation.z = THREE.MathUtils.degToRad(4 * v);
+      return true;
+    }
+    return n.includes('neutral') || n.includes('relaxed');
+  }
+
   lieOnBed(): void {
     this.clearJointRotations();
     this.poseMode = 'bed';
-    this.root.position.set(0, 0.82, 0.12);
+    this.root.position.set(0, 0.88, 0.15);
     this.root.rotation.set(-Math.PI / 2, 0, 0);
     this.setBoneRotation('leftUpperArm', 'z', -8);
     this.setBoneRotation('rightUpperArm', 'z', 8);
-    this.setBoneRotation('leftLowerArm', 'x', -12);
-    this.setBoneRotation('rightLowerArm', 'x', -12);
     this.setCameraPreset('full');
   }
 
   stand(): void {
     this.clearJointRotations();
     this.poseMode = 'stand';
-    this.root.position.set(0, 0.02, -0.25);
+    this.root.position.set(0, 0.03, -0.25);
     this.root.rotation.set(0, 0, 0);
     this.setCameraPreset('full');
   }
@@ -196,12 +218,12 @@ export class FaceAvatarController {
   sitOnBed(): void {
     this.clearJointRotations();
     this.poseMode = 'sit';
-    this.root.position.set(0, 0.62, -0.55);
+    this.root.position.set(0, 0.7, -0.52);
     this.root.rotation.set(0, 0, 0);
     this.setBoneRotation('leftUpperLeg', 'x', -88);
     this.setBoneRotation('rightUpperLeg', 'x', -88);
-    this.setBoneRotation('leftLowerLeg', 'x', 86);
-    this.setBoneRotation('rightLowerLeg', 'x', 86);
+    this.setBoneRotation('leftLowerLeg', 'x', 88);
+    this.setBoneRotation('rightLowerLeg', 'x', 88);
     this.setCameraPreset('front');
   }
 
@@ -210,202 +232,294 @@ export class FaceAvatarController {
     this.root.rotation.z = THREE.MathUtils.degToRad(side === 'left' ? 72 : -72);
   }
 
-  resetPose(): void {
-    this.lieOnBed();
-  }
+  resetPose(): void { this.lieOnBed(); }
 
   setCameraPreset(preset: 'front' | 'close' | 'full'): void {
     if (this.poseMode === 'bed') {
       if (preset === 'close') {
-        this.camera.position.set(0, 1.65, -0.72);
-        this.controls.target.set(0, 0.87, -1.52);
+        this.camera.position.set(0, 1.72, -0.68);
+        this.controls.target.set(0, 0.93, -1.45);
       } else if (preset === 'front') {
-        this.camera.position.set(0, 2.15, 0.4);
-        this.controls.target.set(0, 0.78, -0.78);
+        this.camera.position.set(0, 2.2, 0.42);
+        this.controls.target.set(0, 0.78, -0.72);
       } else {
-        this.camera.position.set(0, 2.65, 2.75);
-        this.controls.target.set(0, 0.72, -0.72);
+        this.camera.position.set(0, 2.75, 2.9);
+        this.controls.target.set(0, 0.72, -0.68);
       }
     } else if (preset === 'close') {
-      this.camera.position.set(0, 1.62, 1.15);
+      this.camera.position.set(0, 1.65, 1.08);
       this.controls.target.set(0, 1.58, 0);
     } else if (preset === 'front') {
-      this.camera.position.set(0, 1.38, 2.45);
+      this.camera.position.set(0, 1.4, 2.5);
       this.controls.target.set(0, 1.28, 0);
     } else {
-      this.camera.position.set(0, 1.15, 3.75);
-      this.controls.target.set(0, 1.0, 0);
+      this.camera.position.set(0, 1.15, 3.85);
+      this.controls.target.set(0, 1.02, 0);
     }
     this.controls.update();
   }
 
   async execute(action: DirectorAction): Promise<boolean> {
     switch (action.type) {
-      case 'bone':
-        return this.setBoneRotation(action.bone, action.axis, action.degrees);
-      case 'camera':
-        this.setCameraPreset(action.preset);
-        return true;
-      case 'resetPose':
-        this.resetPose();
-        return true;
-      case 'gesture':
-        await this.performWave(action.name === 'waveLeft' ? 'left' : 'right');
-        return true;
-      case 'expression':
-        return false;
+      case 'bone': return this.setBoneRotation(action.bone, action.axis, action.degrees);
+      case 'expression': return this.setExpression(action.name, action.value);
+      case 'resetPose': this.resetPose(); return true;
+      case 'camera': this.setCameraPreset(action.preset); return true;
+      case 'gesture': await this.performWave(action.name === 'waveLeft' ? 'left' : 'right'); return true;
     }
   }
 
   private resolveBone(name: string): THREE.Group | undefined {
-    const direct = this.bones.get(name);
-    if (direct) return direct;
-    const normalized = name.replace(/[\s_-]/g, '').toLowerCase();
-    for (const [key, value] of this.bones) {
-      if (key.replace(/[\s_-]/g, '').toLowerCase() === normalized) return value;
+    return this.bones.get(name) ?? this.bones.get(name.replace(/\s+/g, ''));
+  }
+
+  private joint(name: string, parent: THREE.Object3D, x: number, y: number, z: number): THREE.Group {
+    const g = new THREE.Group();
+    g.name = name;
+    g.position.set(x, y, z);
+    parent.add(g);
+    this.bones.set(name, g);
+    return g;
+  }
+
+  private rebuildAvatar(): void {
+    while (this.root.children.length) this.root.remove(this.root.children[0]);
+    this.bones.clear();
+    this.mouth = this.leftEye = this.rightEye = this.leftBrow = this.rightBrow = null;
+    if (!this.faceProfile || !this.bodyProfile) return;
+
+    const f = this.faceProfile;
+    const b = this.bodyProfile;
+    const scale = THREE.MathUtils.clamp(b.heightCm / 170, 0.78, 1.3);
+    const shoulderW = 0.39 * scale * b.shoulderScale * b.buildScale;
+    const chestW = 0.32 * scale * b.chestScale * b.buildScale;
+    const waistW = 0.25 * scale * b.waistScale * b.buildScale;
+    const hipW = 0.29 * scale * b.hipScale * b.buildScale;
+    const torsoH = 0.55 * scale;
+    const upperArmL = 0.31 * scale * b.armScale;
+    const lowerArmL = 0.28 * scale * b.armScale;
+    const upperLegL = 0.43 * scale * b.legScale;
+    const lowerLegL = 0.42 * scale * b.legScale;
+    const skin = mat(f.skinColor, 0.74);
+    const baseSuit = mat('#343544', 0.82);
+
+    const hips = this.joint('hips', this.root, 0, upperLegL + lowerLegL + 0.08, 0);
+    hips.add(roundedPart(hipW * 0.62, 0.12 * scale, 0.2 * scale, baseSuit));
+    const spine = this.joint('spine', hips, 0, 0.16 * scale, 0);
+    const waist = roundedPart(waistW * 0.58, 0.18 * scale, 0.16 * scale, baseSuit);
+    waist.position.y = 0.09 * scale;
+    spine.add(waist);
+    const chest = this.joint('chest', spine, 0, 0.22 * scale, 0);
+    const torso = roundedPart(chestW * 0.58, torsoH * 0.35, 0.19 * scale, baseSuit);
+    torso.position.y = 0.12 * scale;
+    chest.add(torso);
+    const upperChest = this.joint('upperChest', chest, 0, 0.24 * scale, 0);
+    const neck = this.joint('neck', upperChest, 0, 0.16 * scale, 0);
+    const neckMesh = limb(0.12 * scale, 0.055 * scale, skin);
+    neckMesh.position.y = 0.05 * scale;
+    neck.add(neckMesh);
+    const head = this.joint('head', neck, 0, 0.13 * scale, 0);
+    this.createFace(head, f, scale, skin);
+
+    const armRadius = 0.055 * scale * Math.sqrt(b.buildScale);
+    for (const side of ['left', 'right'] as const) {
+      const sign = side === 'left' ? -1 : 1;
+      const shoulder = this.joint(`${side}Shoulder`, upperChest, sign * shoulderW * 0.48, 0.055 * scale, 0);
+      const upper = this.joint(`${side}UpperArm`, shoulder, sign * 0.035 * scale, 0, 0);
+      upper.add(limb(upperArmL, armRadius, skin));
+      const lower = this.joint(`${side}LowerArm`, upper, 0, -upperArmL, 0);
+      lower.add(limb(lowerArmL, armRadius * 0.82, skin));
+      const hand = this.joint(`${side}Hand`, lower, 0, -lowerArmL, 0);
+      const handMesh = roundedPart(0.06 * scale, 0.095 * scale, 0.035 * scale, skin);
+      handMesh.position.y = -0.055 * scale;
+      hand.add(handMesh);
     }
-    return undefined;
+
+    const legRadius = 0.075 * scale * Math.sqrt(b.buildScale);
+    for (const side of ['left', 'right'] as const) {
+      const sign = side === 'left' ? -1 : 1;
+      const upper = this.joint(`${side}UpperLeg`, hips, sign * hipW * 0.34, -0.05 * scale, 0);
+      upper.add(limb(upperLegL, legRadius, skin));
+      const lower = this.joint(`${side}LowerLeg`, upper, 0, -upperLegL, 0);
+      lower.add(limb(lowerLegL, legRadius * 0.83, skin));
+      const foot = this.joint(`${side}Foot`, lower, 0, -lowerLegL, 0.03 * scale);
+      const footMesh = roundedPart(0.08 * scale, 0.06 * scale, 0.15 * scale, skin);
+      footMesh.position.set(0, -0.035 * scale, 0.06 * scale);
+      foot.add(footMesh);
+    }
+
+    this.rebuildWardrobe();
+  }
+
+  private createFace(head: THREE.Group, f: FaceProfile, scale: number, skin: THREE.Material): void {
+    const headWidth = 0.19 * scale;
+    const headHeight = headWidth * f.faceAspect;
+    const headDepth = headWidth * (0.9 + (1 - f.jawWidth) * 0.12);
+    const skull = roundedPart(headWidth, headHeight, headDepth, skin);
+    skull.position.y = 0.05 * scale;
+    head.add(skull);
+
+    const jaw = roundedPart(headWidth * f.jawWidth * 0.72, headHeight * 0.42, headDepth * 0.88, skin);
+    jaw.position.set(0, -headHeight * 0.2, 0.012 * scale);
+    head.add(jaw);
+
+    const eyeY = headHeight * 0.08;
+    const eyeX = headWidth * f.eyeSpacing * 0.95;
+    const eyeR = Math.max(0.018 * scale, headWidth * f.eyeWidth * 0.55);
+    const eyeMat = mat('#f8f8fb', 0.28);
+    const irisMat = mat('#2d3544', 0.35);
+    for (const sign of [-1, 1]) {
+      const eye = mesh(new THREE.SphereGeometry(eyeR, 20, 14), eyeMat);
+      eye.scale.y = 0.68;
+      eye.position.set(sign * eyeX, eyeY, headDepth * 0.92);
+      head.add(eye);
+      const iris = mesh(new THREE.SphereGeometry(eyeR * 0.48, 16, 10), irisMat);
+      iris.position.set(sign * eyeX, eyeY, headDepth * 0.98 + eyeR * 0.4);
+      head.add(iris);
+      if (sign < 0) this.leftEye = eye; else this.rightEye = eye;
+    }
+
+    const nose = mesh(new THREE.ConeGeometry(Math.max(0.018 * scale, headWidth * f.noseWidth * 0.25), Math.max(0.045 * scale, headHeight * f.noseLength * 0.38), 20), skin);
+    nose.rotation.x = Math.PI / 2;
+    nose.position.set(0, -headHeight * 0.04, headDepth * 0.98);
+    head.add(nose);
+
+    const mouthWidth = Math.max(0.06 * scale, headWidth * f.mouthWidth * 1.18);
+    const mouthHeight = Math.max(0.008 * scale, headHeight * f.mouthHeight * 0.55);
+    this.mouth = mesh(new THREE.CapsuleGeometry(mouthHeight, Math.max(0.01, mouthWidth - mouthHeight * 2), 4, 14), mat('#9f5361', 0.42));
+    this.mouth.rotation.z = Math.PI / 2;
+    this.mouth.scale.y = 0.55;
+    this.mouth.position.set(0, -headHeight * 0.22, headDepth * 0.94);
+    head.add(this.mouth);
+
+    const browMat = mat(f.hairColor, 0.8);
+    for (const sign of [-1, 1]) {
+      const brow = mesh(new THREE.BoxGeometry(eyeR * 1.65, 0.009 * scale, 0.012 * scale), browMat);
+      brow.position.set(sign * eyeX, eyeY + eyeR * 1.15, headDepth * 0.95);
+      head.add(brow);
+      if (sign < 0) this.leftBrow = brow; else this.rightBrow = brow;
+    }
+
+    const hair = mesh(new THREE.SphereGeometry(1, 28, 16, 0, Math.PI * 2, 0, Math.PI * 0.56), mat(f.hairColor, 0.87));
+    hair.scale.set(headWidth * 1.04, headHeight * 1.03, headDepth * 1.04);
+    hair.position.y = headHeight * 0.06;
+    head.add(hair);
+    this.resetExpressionGeometry();
+  }
+
+  private resetExpressionGeometry(): void {
+    if (this.mouth) this.mouth.scale.set(1, 0.55, 1);
+    if (this.leftEye) this.leftEye.scale.set(1, 0.68, 1);
+    if (this.rightEye) this.rightEye.scale.set(1, 0.68, 1);
+    if (this.leftBrow) this.leftBrow.rotation.z = 0;
+    if (this.rightBrow) this.rightBrow.rotation.z = 0;
+  }
+
+  private clearWardrobe(): void {
+    for (const joint of this.bones.values()) {
+      [...joint.children].forEach((child) => {
+        if (child.userData.wardrobe) joint.remove(child);
+      });
+    }
+  }
+
+  private addWardrobeMesh(jointName: string, part: THREE.Mesh): void {
+    part.userData.wardrobe = true;
+    this.bones.get(jointName)?.add(part);
+  }
+
+  private rebuildWardrobe(): void {
+    if (!this.bodyProfile) return;
+    this.clearWardrobe();
+    const b = this.bodyProfile;
+    const scale = THREE.MathUtils.clamp(b.heightCm / 170, 0.78, 1.3);
+    const chestW = 0.32 * scale * b.chestScale * b.buildScale;
+    const waistW = 0.25 * scale * b.waistScale * b.buildScale;
+    const hipW = 0.29 * scale * b.hipScale * b.buildScale;
+    const upperArmL = 0.31 * scale * b.armScale;
+    const upperLegL = 0.43 * scale * b.legScale;
+    const lowerLegL = 0.42 * scale * b.legScale;
+    const topMat = mat(this.outfit.topColor, 0.76);
+    const bottomMat = mat(this.outfit.bottomColor, 0.79);
+    const shoeMat = mat(this.outfit.shoeColor, 0.62);
+
+    if (this.outfit.top !== 'bodysuit') {
+      const bulk = this.outfit.top === 'hoodie' || this.outfit.top === 'jacket' ? 1.13 : 1.05;
+      const top = roundedPart(chestW * 0.62 * bulk, 0.21 * scale, 0.205 * scale * bulk, topMat);
+      top.position.y = 0.12 * scale;
+      this.addWardrobeMesh('chest', top);
+      if (this.outfit.top !== 'tank') {
+        for (const side of ['left', 'right'] as const) {
+          const sleeveLength = this.outfit.top === 'tshirt' ? upperArmL * 0.34 : upperArmL * 0.82;
+          const sleeve = limb(sleeveLength, 0.063 * scale * bulk, topMat);
+          this.addWardrobeMesh(`${side}UpperArm`, sleeve);
+        }
+      }
+    }
+
+    if (this.outfit.bottom === 'skirt') {
+      const skirt = mesh(new THREE.CylinderGeometry(hipW * 0.45, hipW * 0.62, 0.34 * scale, 30), bottomMat);
+      skirt.position.y = -0.12 * scale;
+      skirt.userData.wardrobe = true;
+      this.bones.get('hips')?.add(skirt);
+    } else {
+      const short = this.outfit.bottom === 'shorts';
+      for (const side of ['left', 'right'] as const) {
+        const upper = limb(short ? upperLegL * 0.42 : upperLegL * 0.96, 0.082 * scale, bottomMat);
+        this.addWardrobeMesh(`${side}UpperLeg`, upper);
+        if (!short) {
+          const lower = limb(lowerLegL * 0.94, 0.068 * scale, bottomMat);
+          this.addWardrobeMesh(`${side}LowerLeg`, lower);
+        }
+      }
+    }
+
+    if (this.outfit.shoes !== 'barefoot') {
+      const boot = this.outfit.shoes === 'boots';
+      for (const side of ['left', 'right'] as const) {
+        const shoe = roundedPart(0.095 * scale, boot ? 0.12 * scale : 0.075 * scale, 0.17 * scale, shoeMat);
+        shoe.position.set(0, boot ? 0 : -0.03 * scale, 0.065 * scale);
+        this.addWardrobeMesh(`${side}Foot`, shoe);
+      }
+    }
   }
 
   private clearJointRotations(): void {
     for (const joint of this.bones.values()) joint.rotation.set(0, 0, 0);
-    this.root.rotation.set(0, 0, 0);
+    this.resetExpressionGeometry();
   }
 
-  private addBone(name: string, parent: THREE.Object3D, position: THREE.Vector3): THREE.Group {
-    const joint = new THREE.Group();
-    joint.name = name;
-    joint.position.copy(position);
-    parent.add(joint);
-    this.bones.set(name, joint);
-    return joint;
-  }
-
-  private createBody(): void {
-    const skin = makeMaterial(0xe5af91, 0.82);
-    const shirt = makeMaterial(0x5c55c9, 0.68);
-    const pants = makeMaterial(0x24263a, 0.76);
-    const shoe = makeMaterial(0x10121d, 0.58);
-    const hair = makeMaterial(0x251d2b, 0.9);
-
-    const hips = this.addBone('hips', this.root, new THREE.Vector3(0, 1.02, 0));
-    const pelvis = box(0.38, 0.22, 0.22, pants);
-    pelvis.position.y = 0.02;
-    hips.add(pelvis);
-
-    const spine = this.addBone('spine', hips, new THREE.Vector3(0, 0.14, 0));
-    const chest = this.addBone('chest', spine, new THREE.Vector3(0, 0.23, 0));
-    const upperChest = this.addBone('upperChest', chest, new THREE.Vector3(0, 0.2, 0));
-    const torso = box(0.46, 0.52, 0.25, shirt);
-    torso.position.y = -0.05;
-    torso.geometry.translate(0, 0.14, 0);
-    chest.add(torso);
-
-    const neck = this.addBone('neck', upperChest, new THREE.Vector3(0, 0.25, 0));
-    const neckMesh = cylinder(0.13, 0.07, skin);
-    neckMesh.position.y = 0.065;
-    neck.add(neckMesh);
-
-    const head = this.addBone('head', neck, new THREE.Vector3(0, 0.12, 0));
-    const headMesh = new THREE.Mesh(new THREE.SphereGeometry(0.225, 32, 24), skin);
-    headMesh.scale.set(0.93, 1.12, 0.9);
-    headMesh.position.y = 0.22;
-    headMesh.castShadow = true;
-    head.add(headMesh);
-
-    const hairCap = new THREE.Mesh(new THREE.SphereGeometry(0.23, 32, 16, 0, Math.PI * 2, 0, Math.PI * 0.58), hair);
-    hairCap.position.y = 0.27;
-    hairCap.scale.set(0.96, 1.12, 0.92);
-    head.add(hairCap);
-
-    this.faceMaterial = new THREE.MeshBasicMaterial({ transparent: true, side: THREE.DoubleSide, toneMapped: false });
-    const facePlane = new THREE.Mesh(new THREE.PlaneGeometry(0.34, 0.43), this.faceMaterial);
-    facePlane.position.set(0, 0.205, 0.207);
-    head.add(facePlane);
-
-    const makeArm = (side: 'left' | 'right') => {
-      const sign = side === 'left' ? -1 : 1;
-      const shoulderName = `${side}Shoulder`;
-      const upperName = `${side}UpperArm`;
-      const lowerName = `${side}LowerArm`;
-      const handName = `${side}Hand`;
-      const shoulder = this.addBone(shoulderName, upperChest, new THREE.Vector3(0.28 * sign, 0.15, 0));
-      const upper = this.addBone(upperName, shoulder, new THREE.Vector3(0, 0, 0));
-      upper.add(cylinder(0.34, 0.072, shirt));
-      const lower = this.addBone(lowerName, upper, new THREE.Vector3(0, -0.34, 0));
-      lower.add(cylinder(0.31, 0.061, skin));
-      const hand = this.addBone(handName, lower, new THREE.Vector3(0, -0.31, 0));
-      const handMesh = new THREE.Mesh(new THREE.SphereGeometry(0.072, 18, 14), skin);
-      handMesh.scale.set(0.82, 1.15, 0.72);
-      handMesh.position.y = -0.055;
-      hand.add(handMesh);
-    };
-
-    makeArm('left');
-    makeArm('right');
-
-    const makeLeg = (side: 'left' | 'right') => {
-      const sign = side === 'left' ? -1 : 1;
-      const upper = this.addBone(`${side}UpperLeg`, hips, new THREE.Vector3(0.13 * sign, -0.09, 0));
-      upper.add(cylinder(0.49, 0.095, pants));
-      const lower = this.addBone(`${side}LowerLeg`, upper, new THREE.Vector3(0, -0.49, 0));
-      lower.add(cylinder(0.46, 0.075, skin));
-      const foot = this.addBone(`${side}Foot`, lower, new THREE.Vector3(0, -0.46, 0));
-      const footMesh = box(0.15, 0.09, 0.28, shoe);
-      footMesh.position.set(0, -0.04, 0.08);
-      foot.add(footMesh);
-    };
-
-    makeLeg('left');
-    makeLeg('right');
+  private async performWave(side: 'left' | 'right'): Promise<void> {
+    const upper = `${side}UpperArm`;
+    const lower = `${side}LowerArm`;
+    const hand = `${side}Hand`;
+    this.setBoneRotation(upper, 'z', side === 'left' ? -72 : 72);
+    this.setBoneRotation(lower, 'x', -72);
+    for (let i = 0; i < 4; i += 1) {
+      this.setBoneRotation(hand, 'z', i % 2 ? 30 : -30);
+      await sleep(150);
+    }
+    this.setBoneRotation(hand, 'z', 0);
   }
 
   private createRoom(): void {
-    const floorMat = makeMaterial(0x121522, 0.95);
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(10, 10), floorMat);
+    const floor = mesh(new THREE.PlaneGeometry(8, 8), mat('#141625', 0.94), false);
     floor.rotation.x = -Math.PI / 2;
     floor.receiveShadow = true;
     this.scene.add(floor);
 
-    const bedFrameMat = makeMaterial(0x3a2c34, 0.9);
-    const mattressMat = makeMaterial(0xf0edf5, 0.95);
-    const blanketMat = makeMaterial(0x6556ad, 0.9);
-    const pillowMat = makeMaterial(0xffffff, 0.96);
-
-    const frame = box(1.58, 0.28, 2.78, bedFrameMat);
-    frame.position.set(0, 0.25, -0.82);
-    this.scene.add(frame);
-
-    const mattress = box(1.48, 0.24, 2.62, mattressMat);
-    mattress.position.set(0, 0.48, -0.82);
-    this.scene.add(mattress);
-
-    const blanket = box(1.42, 0.035, 1.18, blanketMat);
-    blanket.position.set(0, 0.63, -0.05);
-    this.scene.add(blanket);
-
-    const pillow = box(0.68, 0.15, 0.42, pillowMat);
-    pillow.position.set(0, 0.68, -1.82);
-    pillow.rotation.x = 0.08;
-    this.scene.add(pillow);
-
-    const headboard = box(1.62, 0.95, 0.12, bedFrameMat);
-    headboard.position.set(0, 0.69, -2.18);
-    this.scene.add(headboard);
-  }
-
-  private async performWave(side: 'left' | 'right'): Promise<void> {
-    const upper = side === 'left' ? 'leftUpperArm' : 'rightUpperArm';
-    const lower = side === 'left' ? 'leftLowerArm' : 'rightLowerArm';
-    const hand = side === 'left' ? 'leftHand' : 'rightHand';
-    const sign = side === 'left' ? -1 : 1;
-    this.setBoneRotation(upper, 'z', 82 * sign);
-    this.setBoneRotation(lower, 'x', -80);
-    for (let i = 0; i < 5; i += 1) {
-      this.setBoneRotation(hand, 'z', i % 2 === 0 ? -38 : 38);
-      await sleep(130);
-    }
-    this.setBoneRotation(hand, 'z', 0);
+    const bed = new THREE.Group();
+    const base = mesh(new THREE.BoxGeometry(2.15, 0.34, 3.55), mat('#3a3047', 0.88));
+    base.position.y = 0.32;
+    bed.add(base);
+    const mattress = mesh(new THREE.BoxGeometry(2.05, 0.25, 3.35), mat('#ddd8df', 0.96));
+    mattress.position.y = 0.58;
+    bed.add(mattress);
+    const pillow = roundedPart(0.58, 0.14, 0.42, mat('#eee9ef', 0.95));
+    pillow.position.set(0, 0.78, -1.22);
+    bed.add(pillow);
+    bed.position.z = -0.72;
+    this.scene.add(bed);
   }
 
   private resize(): void {
@@ -417,7 +531,6 @@ export class FaceAvatarController {
   }
 
   private render(): void {
-    if (!this.active) return;
     this.controls.update();
     this.renderer.render(this.scene, this.camera);
   }
