@@ -1,8 +1,11 @@
+export type CharacterKind = 'vrm' | 'image';
+
 export interface StoredCharacter {
   id: string;
   name: string;
   fileName: string;
   blob: Blob;
+  kind?: CharacterKind;
   createdAt: number;
 }
 
@@ -24,13 +27,14 @@ function openDb(): Promise<IDBDatabase> {
   });
 }
 
-export async function saveCharacter(name: string, file: File): Promise<StoredCharacter> {
+export async function saveCharacter(name: string, file: File, kind: CharacterKind = 'vrm'): Promise<StoredCharacter> {
   const db = await openDb();
   const item: StoredCharacter = {
     id: crypto.randomUUID(),
     name,
     fileName: file.name,
     blob: file,
+    kind,
     createdAt: Date.now(),
   };
 
@@ -53,7 +57,9 @@ export async function listCharacters(): Promise<StoredCharacter[]> {
     request.onerror = () => reject(request.error);
   });
   db.close();
-  return items.sort((a, b) => b.createdAt - a.createdAt);
+  return items
+    .map((item) => ({ ...item, kind: item.kind ?? 'vrm' }))
+    .sort((a, b) => b.createdAt - a.createdAt);
 }
 
 export async function deleteCharacter(id: string): Promise<void> {
@@ -68,5 +74,6 @@ export async function deleteCharacter(id: string): Promise<void> {
 }
 
 export function storedCharacterToFile(item: StoredCharacter): File {
-  return new File([item.blob], item.fileName, { type: item.blob.type || 'model/gltf-binary' });
+  const fallbackType = item.kind === 'image' ? 'image/png' : 'model/gltf-binary';
+  return new File([item.blob], item.fileName, { type: item.blob.type || fallbackType });
 }
