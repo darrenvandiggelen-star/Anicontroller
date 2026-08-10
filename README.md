@@ -7,24 +7,18 @@ The app separates **character control** from **chat intelligence**:
 - The Director executes explicit user movement, pose, expression and camera commands directly.
 - Chat can use a local or user-selected AI endpoint without owning the animation layer.
 - VRM characters can be loaded from Android storage.
-- Character bones can be rotated precisely with sliders or typed commands.
-- Expressions can be set with exact weights.
-- GitHub Actions builds a debug APK on every push to `main`.
+- A person photo can be converted locally into an anime-style 2D character.
+- Character bones can be rotated precisely with sliders or typed commands when using a VRM.
+- Expressions can be set with exact weights on compatible VRM characters.
+- GitHub Actions builds a debug APK from `main`.
 
-## First version
+## Character modes
 
-- 3D VRM 0.x / 1.0 character loading with `@pixiv/three-vrm`
-- Android packaging with Capacitor
-- Touch orbit camera
-- Manual bone controls
-- Expression controls
-- Natural-language Director command parser
-- Command queue with exact execution
-- Chat panel with a local fallback persona and a pluggable OpenAI-compatible endpoint
-- Character profile/personality fields
-- Reset pose and camera controls
+### 3D VRM
 
-## Example Director commands
+Use VRM 0.x / VRM 1.0 characters for full rig control. The Director can directly control humanoid bones, expressions, camera position and supported gestures.
+
+Example commands:
 
 ```text
 raise right arm 45 degrees
@@ -38,7 +32,38 @@ camera front
 camera close
 ```
 
-Director commands are intentionally handled separately from the conversational AI. If a command can be represented by the supported character rig, it is executed by the controller rather than negotiated with the character persona.
+### Photo → Anime
+
+Choose a photo from the Android device and create a stylized 2D character locally. The original image is not uploaded by the built-in converter.
+
+Built-in looks:
+
+- Soft Anime
+- Cel Shaded
+- Manga
+
+Photo characters support whole-avatar commands such as:
+
+```text
+tilt left 15
+move right 40
+move up 25
+zoom 125
+bounce
+shake
+nod
+reset pose
+```
+
+A single flat photograph cannot provide independent arm, leg, hand or facial bones. Exact limb control requires a rigged VRM character.
+
+## Live chat
+
+The chat panel includes a local fallback and can be connected to a user-selected OpenAI-compatible endpoint. The conversational AI is kept separate from the Director so it does not own or veto animation controls.
+
+## Character library
+
+Imported VRMs and generated photo characters are stored in the app's local IndexedDB character library so they can be selected again without re-importing every session.
 
 ## Development
 
@@ -60,21 +85,22 @@ npx cap open android
 
 ## GitHub APK build
 
-Open **Actions → Build Android APK** after a push. Download the `anicontroller-debug-apk` artifact when the workflow completes.
+Open **Actions → Build Android APK** after a successful push. Download the `anicontroller-debug-apk` artifact from the completed workflow run.
 
-## Characters
+## Characters and rights
 
-Anicontroller does not redistribute copyrighted anime character models. Use VRM models you created, licensed, or otherwise have permission to use. The character picker stores locally imported VRM files as user-selected characters.
+Anicontroller does not redistribute copyrighted anime character models. Use VRM models and photographs you own, created, licensed, or otherwise have permission to use.
 
 ## Roadmap
 
-- Saved character library with thumbnails
+- Higher-quality optional AI image stylization provider
+- Photo-to-rigged-avatar workflow
+- Saved pose presets
 - VRMA/custom animation import
-- Keyframe timeline and pose presets
+- Keyframe timeline
 - Android speech recognition and TTS
 - Lip sync and emotion-driven facial animation
 - Local on-device LLM option
-- OpenAI-compatible endpoint configuration
 - Motion recording and playback
 - Scene/background selection
 - Touch/drag inverse-kinematics controls
