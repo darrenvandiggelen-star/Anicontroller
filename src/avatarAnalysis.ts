@@ -40,40 +40,64 @@ export const DEFAULT_BODY_PROFILE: BodyProfile = {
   source: 'manual',
 };
 
-const WASM_PATH = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm';
-const FACE_MODEL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
-const POSE_MODEL = 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task';
+function localAsset(path: string): string {
+  return new URL(`mediapipe/${path}`, document.baseURI).toString();
+}
+
+const WASM_PATH = localAsset('wasm');
+const FACE_MODEL = localAsset('models/face_landmarker.task');
+const POSE_MODEL = localAsset('models/pose_landmarker_lite.task');
 
 let visionPromise: ReturnType<typeof FilesetResolver.forVisionTasks> | null = null;
 let faceLandmarkerPromise: Promise<FaceLandmarker> | null = null;
 let poseLandmarkerPromise: Promise<PoseLandmarker> | null = null;
 
-function vision() {
-  visionPromise ??= FilesetResolver.forVisionTasks(WASM_PATH);
+function readableError(error: unknown): string {
+  if (error instanceof Error) return error.message || error.name;
+  return String(error);
+}
+
+async function vision() {
+  if (!visionPromise) {
+    visionPromise = FilesetResolver.forVisionTasks(WASM_PATH).catch((error) => {
+      visionPromise = null;
+      throw new Error(`Scanner engine could not start from the packaged WASM files: ${readableError(error)}`);
+    });
+  }
   return visionPromise;
 }
 
 async function faceLandmarker(): Promise<FaceLandmarker> {
-  faceLandmarkerPromise ??= (async () => FaceLandmarker.createFromOptions(await vision(), {
-    baseOptions: { modelAssetPath: FACE_MODEL },
-    runningMode: 'IMAGE',
-    numFaces: 1,
-    minFaceDetectionConfidence: 0.55,
-    minFacePresenceConfidence: 0.55,
-    outputFaceBlendshapes: true,
-    outputFacialTransformationMatrixes: true,
-  }))();
+  if (!faceLandmarkerPromise) {
+    faceLandmarkerPromise = (async () => FaceLandmarker.createFromOptions(await vision(), {
+      baseOptions: { modelAssetPath: FACE_MODEL },
+      runningMode: 'IMAGE',
+      numFaces: 1,
+      minFaceDetectionConfidence: 0.45,
+      minFacePresenceConfidence: 0.45,
+      outputFaceBlendshapes: true,
+      outputFacialTransformationMatrixes: true,
+    }))().catch((error) => {
+      faceLandmarkerPromise = null;
+      throw new Error(`Face scanner model could not start: ${readableError(error)}`);
+    });
+  }
   return faceLandmarkerPromise;
 }
 
 async function poseLandmarker(): Promise<PoseLandmarker> {
-  poseLandmarkerPromise ??= (async () => PoseLandmarker.createFromOptions(await vision(), {
-    baseOptions: { modelAssetPath: POSE_MODEL },
-    runningMode: 'IMAGE',
-    numPoses: 1,
-    minPoseDetectionConfidence: 0.5,
-    minPosePresenceConfidence: 0.5,
-  }))();
+  if (!poseLandmarkerPromise) {
+    poseLandmarkerPromise = (async () => PoseLandmarker.createFromOptions(await vision(), {
+      baseOptions: { modelAssetPath: POSE_MODEL },
+      runningMode: 'IMAGE',
+      numPoses: 1,
+      minPoseDetectionConfidence: 0.45,
+      minPosePresenceConfidence: 0.45,
+    }))().catch((error) => {
+      poseLandmarkerPromise = null;
+      throw new Error(`Body scanner model could not start: ${readableError(error)}`);
+    });
+  }
   return poseLandmarkerPromise;
 }
 
@@ -82,7 +106,12 @@ async function imageFromBlob(blob: Blob): Promise<{ image: HTMLImageElement; url
   const image = new Image();
   image.decoding = 'async';
   image.src = url;
-  await image.decode();
+  try {
+    await image.decode();
+  } catch (error) {
+    URL.revokeObjectURL(url);
+    throw new Error(`The selected image could not be decoded: ${readableError(error)}`);
+  }
   return { image, url };
 }
 
@@ -127,9 +156,16 @@ export async function analyzeFace(blob: Blob): Promise<FaceProfile> {
   const { image, url } = await imageFromBlob(blob);
   try {
     const detector = await faceLandmarker();
-    const result = detector.detect(image);
+    let result;
+    try {
+      result = detector.detect(image);
+    } catch (error) {
+      throw new Error(`Face scan failed while processing the photo: ${readableError(error)}`);
+    }
     const lm = result.faceLandmarks?.[0];
-    if (!lm || lm.length < 468) throw new Error('No clear face detected. Use a front-facing photo with the full face visible.');
+    if (!lm || lm.length < 468) {
+      throw new Error('No face landmarks were found. Use a well-lit front-facing adult photo with the whole face visible and no heavy blur, sunglasses or obstruction.');
+    }
 
     const faceWidth = dist(lm[234], lm[454]);
     const faceHeight = dist(lm[10], lm[152]);
@@ -174,7 +210,12 @@ export async function analyzeBody(blob: Blob, heightCm = 170): Promise<Partial<B
   const { image, url } = await imageFromBlob(blob);
   try {
     const detector = await poseLandmarker();
-    const result = detector.detect(image);
+    let result;
+    try {
+      result = detector.detect(image);
+    } catch (error) {
+      throw new Error(`Body scan failed while processing the photo: ${readableError(error)}`);
+    }
     const lm = result.landmarks?.[0];
     if (!lm || lm.length < 33) throw new Error('No full body pose detected. Use a standing photo with shoulders, hips, knees and feet visible.');
 
