@@ -33,8 +33,29 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Bundle MediaPipe scanner assets
+        run: |
+          set -euxo pipefail
+          mkdir -p public/mediapipe/wasm public/mediapipe/models
+          cp -v node_modules/@mediapipe/tasks-vision/wasm/* public/mediapipe/wasm/
+          curl -fL --retry 4 --retry-delay 2 \
+            -o public/mediapipe/models/face_landmarker.task \
+            https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task
+          curl -fL --retry 4 --retry-delay 2 \
+            -o public/mediapipe/models/pose_landmarker_lite.task \
+            https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task
+          test -s public/mediapipe/models/face_landmarker.task
+          test -s public/mediapipe/models/pose_landmarker_lite.task
+          find public/mediapipe -maxdepth 2 -type f -printf '%p %s bytes\n'
+
       - name: Build web app
         run: npm run build
+
+      - name: Verify packaged scanner assets
+        run: |
+          test -s dist/mediapipe/models/face_landmarker.task
+          test -s dist/mediapipe/models/pose_landmarker_lite.task
+          test -n "$(find dist/mediapipe/wasm -type f -name '*.wasm' -print -quit)"
 
       - name: Create Android project
         run: npx cap add android
