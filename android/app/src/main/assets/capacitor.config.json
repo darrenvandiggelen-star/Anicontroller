@@ -1,0 +1,8 @@
+{
+	"appId": "za.co.anicontroller.studio",
+	"appName": "Anicontroller",
+	"webDir": "dist",
+	"android": {
+		"backgroundColor": "#090b12"
+	}
+}
