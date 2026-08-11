@@ -1,27 +1,30 @@
 {
   "name": "anicontroller",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --host 0.0.0.0",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview",
+    "preview": "vite preview --host 0.0.0.0",
+    "test": "vitest run",
+    "assets:android": "node scripts/generate-android-assets.mjs",
     "android:add": "cap add android",
     "android:sync": "npm run build && cap sync android",
     "android:open": "cap open android"
   },
   "dependencies": {
-    "@capacitor/android": "8.4.2",
-    "@capacitor/core": "8.4.2",
-    "@mediapipe/tasks-vision": "0.10.35",
-    "@pixiv/three-vrm": "3.5.5",
-    "three": "0.180.0"
+    "@capacitor/android": "8.5.0",
+    "@capacitor/core": "8.5.0",
+    "@wllama/wllama": "^3.5.1",
+    "@wllama/wllama-compat": "^3.5.1",
+    "mp4-muxer": "5.2.2"
   },
   "devDependencies": {
-    "@capacitor/cli": "8.4.2",
-    "@types/three": "0.180.0",
+    "@capacitor/cli": "8.5.0",
+    "sharp": "^0.35.3",
     "typescript": "5.9.2",
-    "vite": "7.1.1"
+    "vite": "7.1.1",
+    "vitest": "4.1.10"
   }
 }
