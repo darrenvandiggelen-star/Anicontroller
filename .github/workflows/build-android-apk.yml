@@ -6,6 +6,9 @@ on:
     branches:
       - main
       - agent/clean-local-ai-android
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: read
