@@ -31,6 +31,28 @@ jobs:
         with:
           gradle-version: '8.9'
 
+      - name: Bundle offline 3D runtime and rigged avatar
+        run: |
+          mkdir -p app/src/main/assets
+          rm -rf /tmp/avatarjs
+          mkdir -p /tmp/avatarjs
+          npm install --prefix /tmp/avatarjs --no-save babylonjs babylonjs-loaders
+          cp /tmp/avatarjs/node_modules/babylonjs/babylon.js app/src/main/assets/babylon.js
+          cp /tmp/avatarjs/node_modules/babylonjs-loaders/babylonjs.loaders.min.js app/src/main/assets/babylonjs.loaders.min.js
+
+          curl -fL --retry 3 --retry-delay 2             "https://raw.githubusercontent.com/madjin/vrm-samples/e16eb187100149a315ad92c3c9968f1d5baa6c7d/vroid/beta/Sendagaya_Shino.vrm"             -o app/src/main/assets/default_avatar.glb
+
+          echo "1e177c1a7b14f783a9c48395831db8616260d3bddd4154cb2784b779adca49b5  app/src/main/assets/default_avatar.glb" | sha256sum -c -
+
+          cat > app/src/main/assets/AVATAR_LICENSE.txt <<'EOF'
+          Built-in rigged avatar base
+          Model: Sendagaya Shino (VRoid Studio sample)
+          License: CC0 1.0 Universal
+          Source commit: e16eb187100149a315ad92c3c9968f1d5baa6c7d
+          Source: https://github.com/madjin/vrm-samples
+          Redistribution and modification permitted.
+          EOF
+
       - name: Build debug APK
         run: gradle :app:assembleDebug --stacktrace
 
