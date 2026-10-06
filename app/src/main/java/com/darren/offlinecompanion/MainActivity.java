@@ -5,12 +5,15 @@ import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.Bundle;
 import android.speech.RecognitionListener;
 import android.speech.RecognizerIntent;
 import android.speech.SpeechRecognizer;
 import android.speech.tts.TextToSpeech;
+import android.util.Base64;
 import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
@@ -18,9 +21,20 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
+import com.google.mlkit.vision.common.InputImage;
+import com.google.mlkit.vision.common.PointF3D;
+import com.google.mlkit.vision.common.Triangle;
+import com.google.mlkit.vision.facemesh.FaceMesh;
+import com.google.mlkit.vision.facemesh.FaceMeshDetection;
+import com.google.mlkit.vision.facemesh.FaceMeshDetector;
+import com.google.mlkit.vision.facemesh.FaceMeshDetectorOptions;
+import com.google.mlkit.vision.facemesh.FaceMeshPoint;
+
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 
 public class MainActivity extends Activity {
@@ -31,6 +45,7 @@ public class MainActivity extends Activity {
     private ValueCallback<Uri[]> fileCallback;
     private SpeechRecognizer recognizer;
     private TextToSpeech tts;
+    private FaceMeshDetector faceMeshDetector;
 
     @SuppressLint({"SetJavaScriptEnabled", "JavascriptInterface"})
     @Override
@@ -72,6 +87,11 @@ public class MainActivity extends Activity {
 
         webView.addJavascriptInterface(new AndroidBridge(), "AndroidBridge");
 
+        faceMeshDetector = FaceMeshDetection.getClient(
+                new FaceMeshDetectorOptions.Builder()
+                        .setUseCase(FaceMeshDetectorOptions.FACE_MESH)
+                        .build());
+
         tts = new TextToSpeech(this, status -> {
             if (status == TextToSpeech.SUCCESS) {
                 int result = tts.setLanguage(new Locale("en", "ZA"));
@@ -100,17 +120,18 @@ public class MainActivity extends Activity {
             int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == AUDIO_PERMISSION) {
-            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            if (grantResults.length > 0 &&
+                    grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 startVoiceInternal();
             } else {
-                jsError("Microphone permission was not granted.");
+                jsSpeechError("Microphone permission was not granted.");
             }
         }
     }
 
     private void startVoiceInternal() {
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
-            jsError("No speech recognizer is installed on this phone.");
+            jsSpeechError("No speech recognizer is installed on this phone.");
             return;
         }
 
@@ -131,7 +152,7 @@ public class MainActivity extends Activity {
 
             @Override
             public void onError(int error) {
-                jsError("Voice recognition stopped. Error " + error + ".");
+                jsSpeechError("Voice recognition stopped. Error " + error + ".");
             }
 
             @Override
@@ -139,9 +160,9 @@ public class MainActivity extends Activity {
                 ArrayList<String> matches =
                         results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
                 if (matches != null && !matches.isEmpty()) {
-                    jsResult(matches.get(0));
+                    jsSpeechResult(matches.get(0));
                 } else {
-                    jsError("I did not catch that.");
+                    jsSpeechError("I did not catch that.");
                 }
             }
         });
@@ -155,14 +176,90 @@ public class MainActivity extends Activity {
         recognizer.startListening(intent);
     }
 
-    private void jsResult(String value) {
+    private void jsSpeechResult(String value) {
         final String js = "window.onNativeSpeechResult(" + JSONObject.quote(value) + ")";
         runOnUiThread(() -> webView.evaluateJavascript(js, null));
     }
 
-    private void jsError(String value) {
+    private void jsSpeechError(String value) {
         final String js = "window.onNativeSpeechError(" + JSONObject.quote(value) + ")";
         runOnUiThread(() -> webView.evaluateJavascript(js, null));
+    }
+
+    private void jsAvatarError(String value) {
+        final String js = "window.onAvatarBuildError(" + JSONObject.quote(value) + ")";
+        runOnUiThread(() -> webView.evaluateJavascript(js, null));
+    }
+
+    private void buildAvatarMesh(String dataUrl) {
+        try {
+            String raw = dataUrl;
+            int comma = raw.indexOf(',');
+            if (comma >= 0) raw = raw.substring(comma + 1);
+
+            byte[] bytes = Base64.decode(raw, Base64.DEFAULT);
+            Bitmap bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+            if (bitmap == null) {
+                jsAvatarError("Could not read the selected face image.");
+                return;
+            }
+
+            InputImage input = InputImage.fromBitmap(bitmap, 0);
+            faceMeshDetector.process(input)
+                    .addOnSuccessListener(meshes -> {
+                        if (meshes == null || meshes.isEmpty()) {
+                            jsAvatarError("No clear face mesh was found. Try a front-facing photo.");
+                            return;
+                        }
+
+                        FaceMesh mesh = meshes.get(0);
+                        try {
+                            JSONObject out = new JSONObject();
+                            out.put("width", bitmap.getWidth());
+                            out.put("height", bitmap.getHeight());
+
+                            android.graphics.Rect bb = mesh.getBoundingBox();
+                            JSONArray bbox = new JSONArray();
+                            bbox.put(bb.left); bbox.put(bb.top);
+                            bbox.put(bb.right); bbox.put(bb.bottom);
+                            out.put("bbox", bbox);
+
+                            JSONArray points = new JSONArray();
+                            for (FaceMeshPoint p : mesh.getAllPoints()) {
+                                PointF3D q = p.getPosition();
+                                JSONArray row = new JSONArray();
+                                row.put(p.getIndex());
+                                row.put(q.getX());
+                                row.put(q.getY());
+                                row.put(q.getZ());
+                                points.put(row);
+                            }
+                            out.put("points", points);
+
+                            JSONArray triangles = new JSONArray();
+                            for (Triangle<FaceMeshPoint> tri : mesh.getAllTriangles()) {
+                                List<FaceMeshPoint> tp = tri.getAllPoints();
+                                if (tp.size() >= 3) {
+                                    JSONArray row = new JSONArray();
+                                    row.put(tp.get(0).getIndex());
+                                    row.put(tp.get(1).getIndex());
+                                    row.put(tp.get(2).getIndex());
+                                    triangles.put(row);
+                                }
+                            }
+                            out.put("triangles", triangles);
+
+                            final String js = "window.onAvatarMeshBuilt(" + out.toString() + ")";
+                            runOnUiThread(() -> webView.evaluateJavascript(js, null));
+                        } catch (Exception ex) {
+                            jsAvatarError("Avatar mesh conversion failed: " + ex.getMessage());
+                        }
+                    })
+                    .addOnFailureListener(e ->
+                            jsAvatarError("Face mesh failed: " + e.getMessage()));
+        } catch (Exception e) {
+            jsAvatarError("Avatar build failed: " + e.getMessage());
+        }
     }
 
     public class AndroidBridge {
@@ -189,6 +286,11 @@ public class MainActivity extends Activity {
                 }
             });
         }
+
+        @JavascriptInterface
+        public void buildAvatar(String faceDataUrl) {
+            buildAvatarMesh(faceDataUrl);
+        }
     }
 
     @Override
@@ -200,6 +302,9 @@ public class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         if (recognizer != null) recognizer.destroy();
+        if (faceMeshDetector != null) {
+            try { faceMeshDetector.close(); } catch (Exception ignored) {}
+        }
         if (tts != null) {
             tts.stop();
             tts.shutdown();
