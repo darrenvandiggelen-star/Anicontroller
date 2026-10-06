@@ -14,6 +14,7 @@ import android.speech.RecognitionListener;
 import android.speech.RecognizerIntent;
 import android.speech.SpeechRecognizer;
 import android.speech.tts.TextToSpeech;
+import android.speech.tts.UtteranceProgressListener;
 import android.util.Base64;
 import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
@@ -127,6 +128,11 @@ public class MainActivity extends Activity {
                         result == TextToSpeech.LANG_NOT_SUPPORTED) {
                     tts.setLanguage(Locale.US);
                 }
+                tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
+                    @Override public void onStart(String utteranceId) { jsTalking(true); }
+                    @Override public void onDone(String utteranceId) { jsTalking(false); }
+                    @Override public void onError(String utteranceId) { jsTalking(false); }
+                });
             }
         });
 
@@ -396,6 +402,11 @@ public class MainActivity extends Activity {
     private void jsAvatarError(String value) {
         final String js =
                 "window.onAvatarBuildError(" + JSONObject.quote(value) + ")";
+        runOnUiThread(() -> webView.evaluateJavascript(js, null));
+    }
+
+    private void jsTalking(boolean value) {
+        final String js = "window.onNativeTalking(" + (value ? "true" : "false") + ")";
         runOnUiThread(() -> webView.evaluateJavascript(js, null));
     }
 
