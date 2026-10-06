@@ -36,12 +36,12 @@ main{min-height:0}.page{display:none;height:100%}.page.active{display:block}
  radial-gradient(circle at 10% 0,rgba(255,79,180,.08),transparent 30%),
  radial-gradient(circle at 92% 36%,rgba(121,94,255,.10),transparent 35%)}
 .creator{max-width:780px;margin:auto;display:grid;gap:11px}.hero{padding:17px;border-radius:23px;background:linear-gradient(145deg,rgba(48,26,61,.95),rgba(18,13,26,.95));border:1px solid rgba(255,255,255,.09);box-shadow:0 18px 45px rgba(0,0,0,.25)}.eyebrow{font-size:10px;font-weight:800;letter-spacing:.16em;color:#e28cff}.hero h2{margin:6px 0;font-size:21px}.hero p{margin:0;color:#b2a7bd;font-size:12.5px;line-height:1.5}
-.modeRow{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}.mode{padding:10px;border-radius:14px;background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.07);font-size:11px;color:#bcb0c8}.mode b{display:block;color:white;margin-bottom:3px}
+.modeRow{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}.mode{padding:10px;border-radius:14px;background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.07);font-size:11px;color:#bcb0c8;text-align:left}.mode b{display:block;color:white;margin-bottom:3px}.mode.active{border-color:rgba(255,79,180,.50);background:linear-gradient(145deg,rgba(255,79,180,.13),rgba(121,94,255,.13));box-shadow:inset 0 0 0 1px rgba(255,255,255,.04)}
 .card{padding:14px;border-radius:20px;background:linear-gradient(180deg,rgba(28,19,38,.95),rgba(15,11,21,.97));border:1px solid rgba(255,255,255,.08);box-shadow:0 12px 34px rgba(0,0,0,.16)}.card h3{font-size:14px;margin:0 0 6px}.muted{font-size:12px;line-height:1.45;color:var(--muted)}
 .slots{display:grid;grid-template-columns:1fr 1fr;gap:9px}.slot{min-height:116px;border-radius:17px;border:1px dashed rgba(255,255,255,.14);background:rgba(255,255,255,.025);padding:9px;position:relative;overflow:hidden}.slot.required{border-color:rgba(255,79,180,.28)}.slotTitle{font-size:11px;font-weight:800}.slotHint{font-size:10px;color:#978ba3;margin-top:3px}.thumb{width:64px;height:64px;border-radius:14px;object-fit:cover;background:#08060b;border:1px solid rgba(255,255,255,.07);margin-top:8px}.pick{position:absolute;right:8px;bottom:8px;padding:7px 9px;border-radius:11px;background:linear-gradient(135deg,#e946a7,#735fff);font-size:10px;font-weight:800}.pick input{position:absolute;inset:0;opacity:0}
 .cropWrap{display:none}.cropWrap.active{display:block}#cropCanvas{width:100%;height:auto;border-radius:16px;background:#08060b;touch-action:none;border:1px solid rgba(255,255,255,.07)}.rangeRow{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;margin-top:8px}input[type=range]{width:100%;accent-color:#ff4fb4}
 .baseRow{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.baseOption{padding:9px 10px;border-radius:13px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.035);font-size:11px}.baseOption.active{border-color:rgba(255,79,180,.42);background:rgba(255,79,180,.09)}
-.build{width:100%;padding:13px;border-radius:15px;background:linear-gradient(135deg,#ff50b6,#725eff);font-weight:850;letter-spacing:.03em}.build:disabled{opacity:.5}
+.build{width:100%;padding:13px;border-radius:15px;background:linear-gradient(135deg,#ff50b6,#725eff);font-weight:850;letter-spacing:.03em}.build:disabled{opacity:.5}.hidden{display:none!important}.presetGrid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:10px}.presetField{padding:9px;border-radius:14px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07)}.presetField label{display:block;font-size:10px;color:#b8adbf;margin-bottom:6px}.presetField select{width:100%;background:#120d18;color:#fff;border:1px solid rgba(255,255,255,.10);border-radius:10px;padding:8px}.valueLine{display:flex;justify-content:space-between;font-size:10px;color:#b8adbf;margin-bottom:3px}
 #buildState{min-height:16px;margin-top:9px;font-size:11px;color:#d8c9e3}.spinner{display:inline-block;width:12px;height:12px;border:2px solid #624a73;border-top-color:#ff4fb4;border-radius:50%;vertical-align:-2px;margin-right:6px;animation:spin .7s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}.qualityPills{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}.pill{font-size:9.5px;border-radius:999px;padding:5px 8px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);color:#c6bacf}
 @media(min-width:760px){.creator{grid-template-columns:1fr 1fr}.hero,.wide{grid-column:1/-1}}
 </style>
@@ -60,32 +60,33 @@ main{min-height:0}.page{display:none;height:100%}.page.active{display:block}
   <div class="stageShade"></div>
   <div class="statusChip"><span class="statusDot"></span><span id="statusText">Create your rigged avatar</span></div>
   <div class="rigActions"><button id="flipRig">Flip</button><button id="resetView">View</button></div>
-  <div id="log" class="log"><div class="msg ai">Create a person from the Creator tab. Front + full body is enough for Quick Build; add left and right face references for Pro Build.</div></div>
+  <div id="log" class="log"><div class="msg ai">Create a person from the Creator tab. Face Only needs just one front face photo; Quick and Pro can also use a full-body reference.</div></div>
   <div class="composer"><input id="chatInput" placeholder="Message your companion…" autocomplete="off"><button id="mic" class="icon">🎙</button><button id="send" class="icon send">➤</button></div>
 </section>
 
 <section id="create" class="page">
   <div class="creator">
     <div class="hero">
-      <div class="eyebrow">CREATOR V0.4</div>
+      <div class="eyebrow">CREATOR V0.5</div>
       <h2>Build a real rigged character</h2>
-      <p>This build uses a real skinned humanoid skeleton. Your photos drive facial geometry, body proportions and appearance instead of turning the photo itself into a flat puppet.</p>
+      <p>Choose how much reference material you want to provide. Face Only generates the body automatically; Quick and Pro can use a real body photo to refine proportions and appearance.</p>
       <div class="modeRow">
-        <div class="mode"><b>Quick Build</b>Front face + full body.</div>
-        <div class="mode"><b>Pro Build</b>Add left + right face references for better depth.</div>
+        <button id="modeFace" class="mode active"><b>Face Only</b>Front face; body generated automatically.</button>
+        <button id="modeQuick" class="mode"><b>Quick Build</b>Front face + full body.</button>
+        <button id="modePro" class="mode"><b>Pro Build</b>Add left + right profiles for stronger depth.</button>
       </div>
     </div>
 
     <div class="card wide">
       <h3>1 · Person references</h3>
-      <div class="muted">Use clear photos of the same person. Side references are optional.</div>
+      <div id="referenceHint" class="muted">Face Only needs just the front face. Side references are optional and improve depth.</div>
       <div class="slots" style="margin-top:10px">
         <div class="slot required">
           <div class="slotTitle">FRONT FACE *</div><div class="slotHint">Straight-on, clear light</div>
           <img id="thumbFront" class="thumb">
           <label class="pick">Choose<input id="fileFront" type="file" accept="image/*"></label>
         </div>
-        <div class="slot required">
+        <div id="bodySlot" class="slot required hidden">
           <div class="slotTitle">FULL BODY *</div><div class="slotHint">Head to feet preferred</div>
           <img id="thumbBody" class="thumb">
           <label class="pick">Choose<input id="fileBody" type="file" accept="image/*"></label>
@@ -110,15 +111,42 @@ main{min-height:0}.page{display:none;height:100%}.page.active{display:block}
       <div class="rangeRow"><input id="cropSize" type="range" min="100" max="430" value="230"><span class="muted">size</span></div>
     </div>
 
+    <div id="bodyPresetCard" class="card wide">
+      <h3>3 · Generated body</h3>
+      <div class="muted">Face Only uses the real humanoid rig and generates a body from these settings. You can change them before building.</div>
+      <div class="presetGrid">
+        <div class="presetField">
+          <label>Body style</label>
+          <select id="bodyType"><option value="average">Average</option><option value="slim">Slim</option><option value="athletic">Athletic</option><option value="broad">Broad</option></select>
+        </div>
+        <div class="presetField">
+          <label>Frame style</label>
+          <select id="frameStyle"><option value="neutral">Neutral</option><option value="masculine">Masculine</option><option value="feminine">Feminine</option></select>
+        </div>
+        <div class="presetField">
+          <div class="valueLine"><span>Height</span><span id="heightValue">50</span></div>
+          <input id="heightPreset" type="range" min="0" max="100" value="50">
+        </div>
+        <div class="presetField">
+          <div class="valueLine"><span>Shoulders</span><span id="shoulderValue">50</span></div>
+          <input id="shoulderPreset" type="range" min="0" max="100" value="50">
+        </div>
+        <div class="presetField" style="grid-column:1/-1">
+          <div class="valueLine"><span>Build</span><span id="buildValue">50</span></div>
+          <input id="buildPreset" type="range" min="0" max="100" value="50">
+        </div>
+      </div>
+    </div>
+
     <div class="card">
-      <h3>3 · Rig style</h3>
+      <h3>4 · Rig style</h3>
       <div class="muted">The rig provides real bones and joints. The person data reshapes/tints it and the reconstructed face sits on the animated head.</div>
       <div class="baseRow" style="margin-top:9px"><button id="baseDefault" class="baseOption active">Rigged humanoid</button></div>
     </div>
 
     <div class="card">
-      <h3>4 · Build</h3>
-      <div class="qualityPills"><span class="pill">real skeleton</span><span class="pill">468-point face</span><span class="pill">33-point body</span><span class="pill">profile depth</span><span class="pill">offline renderer</span></div>
+      <h3>5 · Build</h3>
+      <div class="qualityPills"><span class="pill">real skeleton</span><span class="pill">468-point face</span><span class="pill">generated body</span><span class="pill">optional body refinement</span><span class="pill">offline renderer</span></div>
       <button id="buildBtn" class="build" style="margin-top:11px">GENERATE RIGGED AVATAR</button>
       <div id="buildState"></div>
     </div>
@@ -144,7 +172,7 @@ window.basicNav=function(name){
 (function(){
 const $=function(id){return document.getElementById(id)};
 const statusText=$('statusText'),buildState=$('buildState'),log=$('log'),chatInput=$('chatInput'),mic=$('mic');
-let talking=false,avatarReady=false,currentBuild=null,rigFlipped=false;
+let talking=false,avatarReady=false,currentBuild=null,rigFlipped=false,creationMode='face';
 
 /* ---------------- photos ---------------- */
 const photos={front:null,body:null,left:null,right:null};
@@ -162,6 +190,42 @@ $('fileFront').onchange=function(){readFile(this,'front')};
 $('fileBody').onchange=function(){readFile(this,'body')};
 $('fileLeft').onchange=function(){readFile(this,'left')};
 $('fileRight').onchange=function(){readFile(this,'right')};
+function setCreationMode(mode){
+  creationMode=mode;
+  $('modeFace').classList.toggle('active',mode==='face');
+  $('modeQuick').classList.toggle('active',mode==='quick');
+  $('modePro').classList.toggle('active',mode==='pro');
+  $('bodySlot').classList.toggle('hidden',mode==='face');
+  $('bodyPresetCard').classList.toggle('hidden',mode!=='face');
+  if(mode==='face'){
+    $('referenceHint').textContent='Face Only needs just the front face. Side references are optional and improve depth.';
+    $('buildBtn').textContent='GENERATE FACE-ONLY AVATAR';
+  }else if(mode==='quick'){
+    $('referenceHint').textContent='Quick Build needs a front face and full-body photo. Side profiles remain optional.';
+    $('buildBtn').textContent='GENERATE QUICK AVATAR';
+  }else{
+    $('referenceHint').textContent='Pro Build uses front + full body and works best with both left and right face profiles.';
+    $('buildBtn').textContent='GENERATE PRO AVATAR';
+  }
+}
+$('modeFace').onclick=function(){setCreationMode('face')};
+$('modeQuick').onclick=function(){setCreationMode('quick')};
+$('modePro').onclick=function(){setCreationMode('pro')};
+
+function preset(){
+  return{
+    bodyType:$('bodyType').value,
+    frameStyle:$('frameStyle').value,
+    height:+$('heightPreset').value,
+    shoulders:+$('shoulderPreset').value,
+    build:+$('buildPreset').value
+  }
+}
+[['heightPreset','heightValue'],['shoulderPreset','shoulderValue'],['buildPreset','buildValue']].forEach(function(pair){
+  $(pair[0]).oninput=function(){$(pair[1]).textContent=this.value}
+});
+setCreationMode('face');
+
 
 const cropCanvas=$('cropCanvas'),cropCtx=cropCanvas.getContext('2d'),cropSize=$('cropSize'),cropWrap=$('cropWrap');
 let cropImg=new Image(),cropLoaded=false,crop={x:245,y:170,s:230},cropDrag=false,cropOff={x:0,y:0};
@@ -255,8 +319,18 @@ function applyDelta(key,x,y,z){
 function poseMap(data){const p={};(data.pose||[]).forEach(function(r){p[r[0]]={x:r[1],y:r[2],z:r[3],c:r[4]}});return p}
 function dist(a,b){if(!a||!b)return 0;const x=a.x-b.x,y=a.y-b.y;return Math.sqrt(x*x+y*y)}
 function bodyScales(data){
+  if(data.mode==='faceOnly'){
+    const p=data.bodyPreset||{height:50,shoulders:50,build:50,bodyType:'average',frameStyle:'neutral'};
+    let w=.92+(p.shoulders/100)*.22,d=.91+(p.build/100)*.20,h=.94+(p.height/100)*.13;
+    if(p.bodyType==='slim'){w*=.94;d*=.92}
+    if(p.bodyType==='athletic'){w*=1.05;d*=1.04}
+    if(p.bodyType==='broad'){w*=1.10;d*=1.08}
+    if(p.frameStyle==='masculine')w*=1.04;
+    if(p.frameStyle==='feminine'){w*=.97;d*=.98}
+    return{w:clamp(w,.78,1.28),d:clamp(d,.78,1.25),h:clamp(h,.88,1.14)}
+  }
   const p=poseMap(data),s=dist(p[11],p[12]),h=dist(p[23],p[24]),ankY=((p[27]?p[27].y:.95)+(p[28]?p[28].y:.95))/2,nose=p[0]?p[0].y:.14,bh=Math.max(.45,ankY-nose);
-  const width=clamp((s/bh)/.25,.84,1.18),depth=clamp((h/bh)/.18,.88,1.12);return{w:width,d:depth}
+  const width=clamp((s/bh)/.25,.84,1.18),depth=clamp((h/bh)/.18,.88,1.12);return{w:width,d:depth,h:1}
 }
 function tintMaterials(data){
   if(!scene)return;const skin=hexColor(data.skinColor||'#C79C8B'),hair=hexColor(data.hairColor||'#3A2A2A'),top=hexColor(data.topColor||'#4A4055'),bottom=hexColor(data.bottomColor||'#34333D');
@@ -282,11 +356,11 @@ async function loadRig(data){
     avatarMeshes=result.meshes||[];avatarSkeleton=(result.skeletons&&result.skeletons[0])||scene.skeletons[0]||null;avatarRoot=avatarMeshes[0]||null;
     if(!avatarRoot)throw new Error('No avatar root loaded');
     const b=computeBounds(avatarMeshes),baseScale=1.72/b.height,bs=bodyScales(data);
-    avatarRoot.scaling=new BABYLON.Vector3(baseScale*bs.w,baseScale,baseScale*bs.d);
+    avatarRoot.scaling=new BABYLON.Vector3(baseScale*bs.w,baseScale*(bs.h||1),baseScale*bs.d);
     avatarRoot.position.y=-b.min*baseScale+.02;
     avatarRoot.rotation.y=rigFlipped?Math.PI:0;
     setupBones();tintMaterials(data);createFaceOverlay(data);avatarReady=true;statusText.textContent='Rigged person active';camera.setTarget(new BABYLON.Vector3(0,1.02,0));camera.radius=2.45;basicNav('companion');
-    addMsg('ai','Your rigged avatar is active. The stock skeleton now carries your body proportions, appearance colours and reconstructed face.');speak('Your rigged avatar is ready.');
+    addMsg('ai',data.mode==='faceOnly'?'Your face-only avatar is active. I generated the full body from your selected body settings and attached your reconstructed face.':'Your rigged avatar is active. The skeleton now carries your detected body proportions, appearance colours and reconstructed face.');speak('Your rigged avatar is ready.');
   }catch(e){statusText.textContent='Rig load failed';window.onAvatarBuildError('3D rig failed: '+(e.message||e))}
 }
 function headParent(){return boneNodes.head||avatarRoot}
@@ -319,18 +393,48 @@ $('resetView').onclick=function(){if(camera){camera.alpha=Math.PI/2;camera.beta=
 
 /* ---------------- build ---------------- */
 $('buildBtn').onclick=async function(){
-  if(!photos.front||!photos.body){buildState.textContent='Front face and full-body photos are required.';return}
+  if(!photos.front){buildState.textContent='A front face photo is required.';return}
+  if(creationMode!=='face'&&!photos.body){buildState.textContent='This mode also requires a full-body photo.';return}
   const front=croppedFront();if(!front){buildState.textContent='Select the front face first.';return}
-  this.disabled=true;buildState.innerHTML='<span class="spinner"></span>Analyzing identity, profiles, body proportions and rig…';
-  const body=await normalized(photos.body,1024),left=await normalized(photos.left,512),right=await normalized(photos.right,512);
-  currentBuild={front:front,body:body,left:left,right:right};
+  this.disabled=true;
+  const left=await normalized(photos.left,512),right=await normalized(photos.right,512);
+
+  if(creationMode==='face'){
+    const bodyPreset=preset();
+    currentBuild={front:front,body:'',left:left,right:right,bodyPreset:bodyPreset};
+    buildState.innerHTML='<span class="spinner"></span>Analyzing face and generating full rigged body…';
+    try{
+      if(window.AndroidBridge&&AndroidBridge.buildFaceAvatar)AndroidBridge.buildFaceAvatar(front,left,right);
+      else window.onAvatarBuildError('Native face-only avatar bridge unavailable.');
+    }catch(e){window.onAvatarBuildError(e.message||String(e))}
+    return;
+  }
+
+  const body=await normalized(photos.body,1024);
+  currentBuild={front:front,body:body,left:left,right:right,bodyPreset:null};
+  buildState.innerHTML='<span class="spinner"></span>Analyzing identity, body proportions and rig…';
   try{
     if(window.AndroidBridge&&AndroidBridge.buildRiggedAvatar)AndroidBridge.buildRiggedAvatar(body,front,left,right);
-    else window.onAvatarBuildError('Native avatar analysis bridge unavailable.');
+    else window.onAvatarBuildError('Native body-photo avatar bridge unavailable.');
   }catch(e){window.onAvatarBuildError(e.message||String(e))}
 };
-window.onRiggedAvatarBuilt=function(data){buildState.textContent=(data.hasLeftProfile&&data.hasRightProfile)?'Pro references processed. Building 3D rig…':'Quick references processed. Building 3D rig…';$('buildBtn').disabled=false;loadRig(data)};
-window.onAvatarBuildError=function(t){$('buildBtn').disabled=false;buildState.textContent=t||'Avatar build failed.';statusText.textContent='Avatar needs attention';addMsg('ai',t||'Avatar build failed.')};
+window.onFaceAvatarBuilt=function(data){
+  data.bodyPreset=currentBuild&&currentBuild.bodyPreset?currentBuild.bodyPreset:preset();
+  buildState.textContent=(data.hasLeftProfile||data.hasRightProfile)?'Face references processed. Generating the full body rig…':'Face processed. Generating the full body rig…';
+  $('buildBtn').disabled=false;
+  loadRig(data)
+};
+window.onRiggedAvatarBuilt=function(data){
+  buildState.textContent=(data.hasLeftProfile&&data.hasRightProfile)?'Pro references processed. Building 3D rig…':'Body references processed. Building 3D rig…';
+  $('buildBtn').disabled=false;
+  loadRig(data)
+};
+window.onAvatarBuildError=function(t){
+  $('buildBtn').disabled=false;
+  buildState.textContent=t||'Avatar build failed.';
+  statusText.textContent='Avatar needs attention';
+  addMsg('ai',t||'Avatar build failed.')
+};
 
 ensureScene();
 })();
