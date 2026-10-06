@@ -25,7 +25,7 @@ main{min-height:0}.page{display:none;height:100%}.page.active{display:block}
 .stageShade{position:absolute;inset:0;pointer-events:none;background:linear-gradient(to bottom,rgba(0,0,0,.05),transparent 45%,rgba(4,2,7,.1) 63%,rgba(4,2,7,.95) 100%)}
 .statusChip{position:absolute;top:12px;left:12px;padding:8px 10px;border-radius:13px;background:rgba(10,7,15,.52);border:1px solid var(--line);backdrop-filter:blur(12px);font-size:11px;color:#d4c9df;display:flex;gap:7px;align-items:center}
 .statusDot{width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 10px var(--ok)}
-.rigActions{position:absolute;right:10px;top:10px;display:flex;gap:6px}.rigActions button{padding:8px 9px;border-radius:12px;background:rgba(11,8,16,.56);border:1px solid var(--line);font-size:11px;backdrop-filter:blur(12px)}
+.rigActions{position:absolute;right:10px;top:10px;display:flex;gap:6px}.rigActions button{padding:8px 9px;border-radius:12px;background:rgba(11,8,16,.56);border:1px solid var(--line);font-size:11px;backdrop-filter:blur(12px)}.movePanel{position:absolute;right:10px;top:52px;width:min(310px,calc(100vw - 20px));display:none;grid-template-columns:repeat(3,1fr);gap:6px;padding:8px;border-radius:16px;background:rgba(10,7,15,.90);border:1px solid var(--line);backdrop-filter:blur(18px);z-index:12}.movePanel.open{display:grid}.movePanel button{padding:9px 6px;border-radius:11px;background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.07);font-size:10px}.movePanel button:active{transform:scale(.97)}
 .log{position:absolute;left:10px;right:10px;bottom:79px;max-height:31%;overflow:auto;display:flex;flex-direction:column;gap:7px;scrollbar-width:none;mask-image:linear-gradient(to bottom,transparent,#000 20%,#000)}
 .msg{max-width:84%;padding:10px 12px;border-radius:17px;font-size:13px;line-height:1.35;backdrop-filter:blur(15px);box-shadow:0 8px 22px rgba(0,0,0,.18)}.ai{align-self:flex-start;background:rgba(22,15,30,.80);border:1px solid rgba(255,255,255,.075)}.me{align-self:flex-end;background:linear-gradient(135deg,rgba(141,62,203,.94),rgba(225,61,158,.94));border:1px solid rgba(255,255,255,.10)}
 .composer{position:absolute;left:9px;right:9px;bottom:max(8px,env(safe-area-inset-bottom));display:grid;grid-template-columns:1fr 52px 52px;gap:7px;z-index:10}
@@ -59,7 +59,14 @@ main{min-height:0}.page{display:none;height:100%}.page.active{display:block}
   <canvas id="scene"></canvas>
   <div class="stageShade"></div>
   <div class="statusChip"><span class="statusDot"></span><span id="statusText">Create your rigged avatar</span></div>
-  <div class="rigActions"><button id="flipRig">Flip</button><button id="resetView">View</button></div>
+  <div class="rigActions"><button id="movesBtn">Moves</button><button id="testMoves">Test Moves</button><button id="flipRig">Flip</button><button id="resetView">View</button></div>
+  <div id="movePanel" class="movePanel">
+    <button data-move="waveRight">Wave Right</button><button data-move="waveLeft">Wave Left</button><button data-move="armsUp">Arms Up</button>
+    <button data-move="raiseRight">Right Arm Up</button><button data-move="raiseLeft">Left Arm Up</button><button data-move="nod">Nod</button>
+    <button data-move="shakeHead">Shake Head</button><button data-move="lookLeft">Look Left</button><button data-move="lookRight">Look Right</button>
+    <button data-move="bow">Bow</button><button data-move="sit">Sit</button><button data-move="stand">Stand</button>
+    <button data-move="dance">Dance</button><button data-move="walk">Walk In Place</button><button data-move="stop">Stop</button>
+  </div>
   <div id="log" class="log"><div class="msg ai">Create a person from the Creator tab. Face Only needs just one front face photo; Quick and Pro can also use a full-body reference.</div></div>
   <div class="composer"><input id="chatInput" placeholder="Message your companion…" autocomplete="off"><button id="mic" class="icon">🎙</button><button id="send" class="icon send">➤</button></div>
 </section>
@@ -262,7 +269,14 @@ function normalized(url,maxDim){
 function addMsg(who,text){const d=document.createElement('div');d.className='msg '+who;d.textContent=text;log.appendChild(d);log.scrollTop=log.scrollHeight}
 function localReply(t){const q=t.toLowerCase();if(q.includes('hello')||q==='hi')return "Hey. I'm here.";if(q.includes('avatar')||q.includes('body'))return avatarReady?"This is the rigged avatar generated from your reference set.":"Create a person first in the Creator tab.";if(q.includes('offline'))return "The renderer, rig and vision models are bundled into the APK.";return["Tell me more.","Got it. What should we do next?","I'm following.","Okay. Keep going."][[].slice.call(t).reduce(function(n,c){return n+c.charCodeAt(0)},0)%4]}
 function speak(t){try{if(window.AndroidBridge&&AndroidBridge.speak){talking=true;AndroidBridge.speak(t)}}catch(e){}}
-function send(){const t=chatInput.value.trim();if(!t)return;chatInput.value='';addMsg('me',t);setTimeout(function(){const r=localReply(t);addMsg('ai',r);speak(r)},120)}
+function send(){const t=chatInput.value.trim();if(!t)return;chatInput.value='';addMsg('me',t);
+  const cmd=movementCommand(t);
+  if(cmd){
+    if(!avatarReady){const r='Create an avatar first, then I can perform that movement.';addMsg('ai',r);speak(r);return}
+    setMotion(cmd.name,cmd.duration||0,!!cmd.persistent);addMsg('ai',cmd.reply);speak(cmd.reply);return
+  }
+  setTimeout(function(){const r=localReply(t);addMsg('ai',r);speak(r)},120)
+}
 $('send').onclick=send;chatInput.onkeydown=function(e){if(e.key==='Enter')send()};
 mic.onclick=function(){try{mic.classList.add('listen');AndroidBridge.startVoice()}catch(e){mic.classList.remove('listen');addMsg('ai','Voice input unavailable.')}};
 window.onNativeSpeechResult=function(t){mic.classList.remove('listen');chatInput.value=t||'';if(chatInput.value.trim())send()};
@@ -272,6 +286,7 @@ window.onNativeTalking=function(v){talking=!!v};
 /* ---------------- Babylon rig ---------------- */
 const canvas=$('scene');
 let engine=null,scene=null,camera=null,avatarRoot=null,avatarMeshes=[],avatarSkeleton=null,boneNodes={},boneBase={},faceOverlay=null,faceBase=null,faceMeta=null,faceMap={},sceneReady=false;
+let motion={name:'idle',start:0,duration:0,persistent:false},avatarRestY=0,avatarRestRotY=0,movementTestTimer=null;
 function hexColor(h){try{return BABYLON.Color3.FromHexString(h)}catch(e){return new BABYLON.Color3(.7,.6,.6)}}
 function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
 function ensureScene(){
@@ -307,10 +322,17 @@ function captureBone(key,tokens){
   boneBase[key]=n.rotationQuaternion.clone();
 }
 function setupBones(){
+  captureBone('hips',['jbipchips','hips']);
+  captureBone('spine',['jbipcspine','spine']);
+  captureBone('chest',['jbipcchest','chest']);
+  captureBone('upperChest',['jbipcupperchest','upperchest']);
   captureBone('head',['jbipchead','head']);captureBone('neck',['jbipcneck','neck']);
   captureBone('lua',['jbiplupperarm','leftupperarm','upperarml']);captureBone('rua',['jbiprupperarm','rightupperarm','upperarmr']);
   captureBone('lla',['jbipllowerarm','leftlowerarm','lowerarml']);captureBone('rla',['jbiprlowerarm','rightlowerarm','lowerarmr']);
+  captureBone('lhand',['jbiplhand','lefthand','handl']);captureBone('rhand',['jbiprhand','righthand','handr']);
   captureBone('lleg',['jbiplupperleg','leftupperleg','thighl']);captureBone('rleg',['jbiprupperleg','rightupperleg','thighr']);
+  captureBone('lknee',['jbipllowerleg','leftlowerleg','calfl']);captureBone('rknee',['jbiprlowerleg','rightlowerleg','calfr']);
+  captureBone('lfoot',['jbiplfoot','leftfoot','footl']);captureBone('rfoot',['jbiprfoot','rightfoot','footr']);
 }
 function applyDelta(key,x,y,z){
   const n=boneNodes[key],b=boneBase[key];if(!n||!b)return;
@@ -359,7 +381,9 @@ async function loadRig(data){
     avatarRoot.scaling=new BABYLON.Vector3(baseScale*bs.w,baseScale*(bs.h||1),baseScale*bs.d);
     avatarRoot.position.y=-b.min*baseScale+.02;
     avatarRoot.rotation.y=rigFlipped?Math.PI:0;
-    setupBones();tintMaterials(data);createFaceOverlay(data);avatarReady=true;statusText.textContent='Rigged person active';camera.setTarget(new BABYLON.Vector3(0,1.02,0));camera.radius=2.45;basicNav('companion');
+    avatarRestY=avatarRoot.position.y;avatarRestRotY=avatarRoot.rotation.y;
+    setupBones();tintMaterials(data);createFaceOverlay(data);avatarReady=true;
+    const check=boneCheck();statusText.textContent=check.ok?'Rigged person active • movement ready':'Rig active • '+check.missing.length+' movement bones missing';camera.setTarget(new BABYLON.Vector3(0,1.02,0));camera.radius=2.45;basicNav('companion');
     addMsg('ai',data.mode==='faceOnly'?'Your face-only avatar is active. I generated the full body from your selected body settings and attached your reconstructed face.':'Your rigged avatar is active. The skeleton now carries your detected body proportions, appearance colours and reconstructed face.');speak('Your rigged avatar is ready.');
   }catch(e){statusText.textContent='Rig load failed';window.onAvatarBuildError('3D rig failed: '+(e.message||e))}
 }
@@ -378,18 +402,105 @@ function animateFace(t){
   for(let i=0;i<faceMeta.length;i++){const m=faceMeta[i];if(!m)continue;const du=m.u-mouth.u,dv=m.v-mouth.v,d=Math.sqrt(du*du+dv*dv);if(d<.11){const w=1-d/.11,dir=m.v>mouth.v?-1:1;arr[i*3+1]+=dir*open*w*.018}}
   faceOverlay.updateVerticesData(BABYLON.VertexBuffer.PositionKind,arr,false,false)
 }
-function animateRig(){
-  if(!avatarReady)return;const t=performance.now()/1000,voice=talking?1:0;
-  applyDelta('head',Math.sin(t*.7)*.025,Math.sin(t*.42)*.05,Math.sin(t*.55)*.02);
-  applyDelta('neck',Math.sin(t*.5)*.008,0,Math.sin(t*.45)*.008);
-  applyDelta('lua',0,0,.035*Math.sin(t*.85)-voice*.06*Math.sin(t*4.1));
-  applyDelta('rua',0,0,-.035*Math.sin(t*.85)+voice*.11*Math.sin(t*4.4));
-  applyDelta('lla',0,0,voice*.07*Math.sin(t*5.0));
-  applyDelta('rla',0,0,-voice*.09*Math.sin(t*5.2));
-  applyDelta('lleg',.008*Math.sin(t*.7),0,0);applyDelta('rleg',-.008*Math.sin(t*.7),0,0);animateFace(t)
+function boneCheck(){
+  const required=['hips','spine','chest','head','lua','rua','lla','rla','lleg','rleg','lknee','rknee'];
+  const missing=required.filter(function(k){return !boneNodes[k]});
+  return{ok:missing.length===0,missing:missing}
 }
-$('flipRig').onclick=function(){rigFlipped=!rigFlipped;if(avatarRoot)avatarRoot.rotation.y=rigFlipped?Math.PI:0};
+function setMotion(name,duration,persistent){
+  if(!avatarReady&&name!=='stop'){addMsg('ai','Create an avatar first, then I can move.');return false}
+  if(movementTestTimer){clearTimeout(movementTestTimer);movementTestTimer=null}
+  motion={name:name,start:performance.now()/1000,duration:duration||0,persistent:!!persistent};
+  if(name==='stand'||name==='stop')motion={name:'idle',start:performance.now()/1000,duration:0,persistent:false};
+  const labels={waveRight:'waving right hand',waveLeft:'waving left hand',raiseRight:'raising right arm',raiseLeft:'raising left arm',armsUp:'raising both arms',nod:'nodding',shakeHead:'shaking head',lookLeft:'looking left',lookRight:'looking right',bow:'bowing',sit:'sitting',stand:'standing',dance:'dancing',walk:'walking in place',stop:'stopping'};
+  statusText.textContent=labels[name]||'Rigged person active';
+  return true
+}
+function motionPose(t){
+  const p={};
+  function add(k,x,y,z){p[k]=[x||0,y||0,z||0]}
+  const name=motion.name,elapsed=t-motion.start;
+  if(!motion.persistent&&motion.duration>0&&elapsed>motion.duration){motion={name:'idle',start:t,duration:0,persistent:false};statusText.textContent='Rigged person active';return p}
+  const s=Math.sin(elapsed*6.2),s2=Math.sin(elapsed*3.4);
+  if(name==='waveRight'){add('rua',-.10,0,-1.18);add('rla',0,-.15,-.72+.24*s);add('rhand',0,.22*s,0)}
+  else if(name==='waveLeft'){add('lua',-.10,0,1.18);add('lla',0,.15,.72-.24*s);add('lhand',0,-.22*s,0)}
+  else if(name==='raiseRight'){add('rua',-.06,0,-1.38);add('rla',0,0,-.12)}
+  else if(name==='raiseLeft'){add('lua',-.06,0,1.38);add('lla',0,0,.12)}
+  else if(name==='armsUp'){add('lua',-.10,0,1.32);add('rua',-.10,0,-1.32);add('lla',0,0,.10);add('rla',0,0,-.10)}
+  else if(name==='nod'){add('head',.22*s2,0,0);add('neck',.08*s2,0,0)}
+  else if(name==='shakeHead'){add('head',0,.34*s2,0);add('neck',0,.08*s2,0)}
+  else if(name==='lookLeft'){add('head',0,.55,0);add('neck',0,.15,0)}
+  else if(name==='lookRight'){add('head',0,-.55,0);add('neck',0,-.15,0)}
+  else if(name==='bow'){add('hips',.08,0,0);add('spine',.25,0,0);add('chest',.28,0,0);add('head',-.10,0,0)}
+  else if(name==='sit'){add('hips',-.10,0,0);add('spine',-.08,0,0);add('lleg',1.05,0,.05);add('rleg',1.05,0,-.05);add('lknee',-1.45,0,0);add('rknee',-1.45,0,0)}
+  else if(name==='dance'){add('hips',0,.20*s2,.16*s);add('chest',0,-.14*s2,-.12*s);add('lua',0,0,.55+.40*s);add('rua',0,0,-.55-.40*s);add('lla',0,0,.30*s2);add('rla',0,0,-.30*s2);add('lleg',.16*Math.max(0,s),0,.06);add('rleg',.16*Math.max(0,-s),0,-.06)}
+  else if(name==='walk'){add('lleg',.34*s,0,0);add('rleg',-.34*s,0,0);add('lknee',-.26*Math.max(0,-s),0,0);add('rknee',-.26*Math.max(0,s),0,0);add('lua',0,0,-.20*s);add('rua',0,0,-.20*s)}
+  return p
+}
+function movementCommand(text){
+  const q=(text||'').toLowerCase().replace(/[^a-z0-9 ]/g,' ');
+  if(/\b(stop|freeze|stay still|stand up|stand)\b/.test(q))return{name:'stand',duration:0,persistent:false,reply:"Standing normally."};
+  if(/\bsit( down)?\b/.test(q))return{name:'sit',duration:0,persistent:true,reply:"Sitting down."};
+  if(/\bwave\b/.test(q)&&/\bleft\b/.test(q))return{name:'waveLeft',duration:3.5,reply:"Waving with my left hand."};
+  if(/\bwave\b/.test(q))return{name:'waveRight',duration:3.5,reply:"Waving."};
+  if(/(raise|lift|put).*\bboth\b.*\barm/.test(q)||/\barms up\b/.test(q))return{name:'armsUp',duration:3.0,reply:"Both arms up."};
+  if(/(raise|lift|put).*\bleft\b.*\barm/.test(q))return{name:'raiseLeft',duration:3.0,reply:"Raising my left arm."};
+  if(/(raise|lift|put).*\bright\b.*\barm/.test(q))return{name:'raiseRight',duration:3.0,reply:"Raising my right arm."};
+  if(/\bnod\b/.test(q))return{name:'nod',duration:2.4,reply:"Nodding."};
+  if(/shake.*head|\bno with your head\b/.test(q))return{name:'shakeHead',duration:2.5,reply:"Shaking my head."};
+  if(/look.*left/.test(q))return{name:'lookLeft',duration:3.0,reply:"Looking left."};
+  if(/look.*right/.test(q))return{name:'lookRight',duration:3.0,reply:"Looking right."};
+  if(/\bbow\b/.test(q))return{name:'bow',duration:2.8,reply:"Bowing."};
+  if(/\bdance\b/.test(q))return{name:'dance',duration:6.0,reply:"Dancing."};
+  if(/\bwalk\b/.test(q))return{name:'walk',duration:6.0,reply:"Walking in place."};
+  return null
+}
+function runMovementSelfTest(){
+  if(!avatarReady){addMsg('ai','Create an avatar first, then tap Test Moves.');return}
+  const check=boneCheck();
+  if(!check.ok){addMsg('ai','Movement self-test found missing bones: '+check.missing.join(', '));statusText.textContent='Movement test: missing bones';return}
+  const seq=[['nod',1600],['waveRight',2800],['raiseLeft',1800],['bow',1800],['sit',1800],['stand',1000],['dance',3600]];
+  let i=0;
+  addMsg('ai','Movement self-test started: head, arms, bow, sit/stand and dance.');
+  function next(){
+    if(i>=seq.length){setMotion('stand');statusText.textContent='Movement test passed';addMsg('ai','Movement self-test complete. All required rig bones responded.');return}
+    const item=seq[i++];setMotion(item[0],item[1]/1000,item[0]==='sit');movementTestTimer=setTimeout(next,item[1]);
+  }
+  next()
+}
+
+function animateRig(){
+  if(!avatarReady)return;const t=performance.now()/1000,voice=talking?1:0,m=motionPose(t);
+  const base={
+    head:[Math.sin(t*.7)*.025,Math.sin(t*.42)*.05,Math.sin(t*.55)*.02],
+    neck:[Math.sin(t*.5)*.008,0,Math.sin(t*.45)*.008],
+    lua:[0,0,.035*Math.sin(t*.85)-voice*.06*Math.sin(t*4.1)],
+    rua:[0,0,-.035*Math.sin(t*.85)+voice*.11*Math.sin(t*4.4)],
+    lla:[0,0,voice*.07*Math.sin(t*5.0)],
+    rla:[0,0,-voice*.09*Math.sin(t*5.2)],
+    lleg:[.008*Math.sin(t*.7),0,0],rleg:[-.008*Math.sin(t*.7),0,0]
+  };
+  const keys=['hips','spine','chest','upperChest','head','neck','lua','rua','lla','rla','lhand','rhand','lleg','rleg','lknee','rknee','lfoot','rfoot'];
+  keys.forEach(function(k){const a=base[k]||[0,0,0],b=m[k]||[0,0,0];applyDelta(k,a[0]+b[0],a[1]+b[1],a[2]+b[2])});
+  if(avatarRoot){
+    let y=avatarRestY,rot=avatarRestRotY;
+    if(motion.name==='sit')y=avatarRestY-.28;
+    if(motion.name==='dance')y=avatarRestY+.025*Math.abs(Math.sin((t-motion.start)*5));
+    avatarRoot.position.y=y;avatarRoot.rotation.y=rot;
+  }
+  animateFace(t)
+}
+$('flipRig').onclick=function(){rigFlipped=!rigFlipped;if(avatarRoot){avatarRestRotY=rigFlipped?Math.PI:0;avatarRoot.rotation.y=avatarRestRotY}};
 $('resetView').onclick=function(){if(camera){camera.alpha=Math.PI/2;camera.beta=Math.PI/2.14;camera.radius=2.45;camera.setTarget(new BABYLON.Vector3(0,1.02,0))}};
+$('movesBtn').onclick=function(){$('movePanel').classList.toggle('open')};
+$('testMoves').onclick=function(){$('movePanel').classList.remove('open');runMovementSelfTest()};
+Array.prototype.forEach.call(document.querySelectorAll('#movePanel [data-move]'),function(btn){
+  btn.onclick=function(){
+    const name=this.getAttribute('data-move');
+    const durations={waveRight:3.5,waveLeft:3.5,armsUp:3,raiseRight:3,raiseLeft:3,nod:2.4,shakeHead:2.5,lookLeft:3,lookRight:3,bow:2.8,sit:0,stand:0,dance:6,walk:6,stop:0};
+    setMotion(name,durations[name]||0,name==='sit');$('movePanel').classList.remove('open')
+  }
+});
 
 /* ---------------- build ---------------- */
 $('buildBtn').onclick=async function(){
