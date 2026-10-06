@@ -74,7 +74,7 @@ main{min-height:0}.page{display:none;height:100%}.page.active{display:block}
 <section id="create" class="page">
   <div class="creator">
     <div class="hero">
-      <div class="eyebrow">CREATOR V0.5</div>
+      <div class="eyebrow">CREATOR V0.7</div>
       <h2>Build a real rigged character</h2>
       <p>Choose how much reference material you want to provide. Face Only generates the body automatically; Quick and Pro can use a real body photo to refine proportions and appearance.</p>
       <div class="modeRow">
@@ -179,7 +179,7 @@ window.basicNav=function(name){
 (function(){
 const $=function(id){return document.getElementById(id)};
 const statusText=$('statusText'),buildState=$('buildState'),log=$('log'),chatInput=$('chatInput'),mic=$('mic');
-let talking=false,avatarReady=false,currentBuild=null,rigFlipped=false,creationMode='face';
+let talking=false,avatarReady=false,currentBuild=null,creationMode='face';
 
 /* ---------------- photos ---------------- */
 const photos={front:null,body:null,left:null,right:null};
@@ -256,7 +256,15 @@ cropCanvas.onpointerup=function(){cropDrag=false};
 cropSize.oninput=function(){const mx=crop.x+crop.s/2,my=crop.y+crop.s/2;crop.s=+cropSize.value;crop.x=mx-crop.s/2;crop.y=my-crop.s/2;clampCrop();drawCrop()};
 function croppedFront(){
   if(!cropLoaded)return null;const f=fitCrop(),sx=(crop.x-f.x)/f.w*cropImg.width,sy=(crop.y-f.y)/f.h*cropImg.height,ss=crop.s/f.w*cropImg.width;
-  const c=document.createElement('canvas');c.width=c.height=512;const k=c.getContext('2d');k.fillStyle='#17111b';k.fillRect(0,0,512,512);k.drawImage(cropImg,sx,sy,ss,ss,0,0,512,512);return c.toDataURL('image/jpeg',.94)
+  const c=document.createElement('canvas');c.width=c.height=512;const k=c.getContext('2d');k.fillStyle='#17111b';k.fillRect(0,0,512,512);k.drawImage(cropImg,sx,sy,ss,ss,0,0,512,512);return c.toDataURL('image/jpeg',.96)
+}
+function croppedFrontMasked(){
+  if(!cropLoaded)return null;const f=fitCrop(),sx=(crop.x-f.x)/f.w*cropImg.width,sy=(crop.y-f.y)/f.h*cropImg.height,ss=crop.s/f.w*cropImg.width;
+  const c=document.createElement('canvas');c.width=c.height=512;const k=c.getContext('2d');k.clearRect(0,0,512,512);k.drawImage(cropImg,sx,sy,ss,ss,0,0,512,512);
+  k.globalCompositeOperation='destination-in';
+  const g=k.createRadialGradient(256,244,172,256,244,255);g.addColorStop(0,'rgba(255,255,255,1)');g.addColorStop(.78,'rgba(255,255,255,1)');g.addColorStop(1,'rgba(255,255,255,0)');
+  k.fillStyle=g;k.fillRect(0,0,512,512);k.globalCompositeOperation='source-over';
+  return c.toDataURL('image/png')
 }
 function normalized(url,maxDim){
   return new Promise(function(resolve){
@@ -268,7 +276,20 @@ function normalized(url,maxDim){
 /* ---------------- chat ---------------- */
 function addMsg(who,text){const d=document.createElement('div');d.className='msg '+who;d.textContent=text;log.appendChild(d);log.scrollTop=log.scrollHeight}
 function localReply(t){const q=t.toLowerCase();if(q.includes('hello')||q==='hi')return "Hey. I'm here.";if(q.includes('avatar')||q.includes('body'))return avatarReady?"This is the rigged avatar generated from your reference set.":"Create a person first in the Creator tab.";if(q.includes('offline'))return "The renderer, rig and vision models are bundled into the APK.";return["Tell me more.","Got it. What should we do next?","I'm following.","Okay. Keep going."][[].slice.call(t).reduce(function(n,c){return n+c.charCodeAt(0)},0)%4]}
-function speak(t){try{if(window.AndroidBridge&&AndroidBridge.speak){talking=true;AndroidBridge.speak(t)}}catch(e){}}
+let speechText='',speechStart=0;
+function prepareSpeech(t){speechText=(t||'').toLowerCase().replace(/\s+/g,' ')}
+function speak(t){try{if(window.AndroidBridge&&AndroidBridge.speak){prepareSpeech(t);talking=true;AndroidBridge.speak(t)}}catch(e){}}
+function visemeAt(t){
+  if(!talking||!speechText)return{open:.04,wide:0,round:0,closed:0};
+  const idx=Math.floor(Math.max(0,t-speechStart)*12)%Math.max(1,speechText.length),c=speechText[idx]||' ';
+  if(/[bmp]/.test(c))return{open:.01,wide:0,round:0,closed:1};
+  if(/[ouqw]/.test(c))return{open:.34,wide:0,round:1,closed:0};
+  if(/[a]/.test(c))return{open:.72,wide:.18,round:0,closed:0};
+  if(/[eiy]/.test(c))return{open:.22,wide:.85,round:0,closed:0};
+  if(/[fv]/.test(c))return{open:.12,wide:.18,round:0,closed:.15};
+  if(/[lrtnsdkgcjxz]/.test(c))return{open:.30,wide:.30,round:0,closed:0};
+  return{open:.10,wide:.10,round:0,closed:0}
+}
 function send(){const t=chatInput.value.trim();if(!t)return;chatInput.value='';addMsg('me',t);
   const cmd=movementCommand(t);
   if(cmd){
@@ -281,12 +302,13 @@ $('send').onclick=send;chatInput.onkeydown=function(e){if(e.key==='Enter')send()
 mic.onclick=function(){try{mic.classList.add('listen');AndroidBridge.startVoice()}catch(e){mic.classList.remove('listen');addMsg('ai','Voice input unavailable.')}};
 window.onNativeSpeechResult=function(t){mic.classList.remove('listen');chatInput.value=t||'';if(chatInput.value.trim())send()};
 window.onNativeSpeechError=function(t){mic.classList.remove('listen');addMsg('ai',t||'Voice recognition unavailable.')};
-window.onNativeTalking=function(v){talking=!!v};
+window.onNativeTalking=function(v){talking=!!v;if(talking)speechStart=performance.now()/1000;else speechText=''};
 
 /* ---------------- Babylon rig ---------------- */
 const canvas=$('scene');
-let engine=null,scene=null,camera=null,avatarRoot=null,avatarMeshes=[],avatarSkeleton=null,boneNodes={},boneBase={},faceOverlay=null,faceBase=null,faceMeta=null,faceMap={},sceneReady=false;
-let motion={name:'idle',start:0,duration:0,persistent:false},avatarRestY=0,avatarRestRotY=0,movementTestTimer=null;
+let engine=null,scene=null,camera=null,avatarRoot=null,avatarMeshes=[],avatarSkeleton=null,boneNodes={},boneBase={},faceOverlay=null,faceBase=null,faceMeta=null,faceMap={},sceneReady=false,shadowGen=null;
+let motion={name:'idle',start:0,duration:0,persistent:false},avatarRestY=0,avatarRestRotY=0,movementTestTimer=null,rigFlipped=true;
+let bonePose={},lastAnimT=0,blinkNext=0,blinkStart=-1;
 function hexColor(h){try{return BABYLON.Color3.FromHexString(h)}catch(e){return new BABYLON.Color3(.7,.6,.6)}}
 function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
 function ensureScene(){
@@ -297,10 +319,12 @@ function ensureScene(){
   camera=new BABYLON.ArcRotateCamera('cam',Math.PI/2,Math.PI/2.14,2.55,new BABYLON.Vector3(0,1.0,0),scene);
   camera.attachControl(canvas,true);camera.lowerRadiusLimit=1.75;camera.upperRadiusLimit=3.8;camera.lowerBetaLimit=.95;camera.upperBetaLimit=1.8;camera.wheelPrecision=80;camera.panningSensibility=0;
   const hemi=new BABYLON.HemisphericLight('hemi',new BABYLON.Vector3(0,1,0),scene);hemi.intensity=.95;hemi.diffuse=new BABYLON.Color3(.82,.74,1);
-  const key=new BABYLON.DirectionalLight('key',new BABYLON.Vector3(-.4,-1,-.55),scene);key.position=new BABYLON.Vector3(1.4,2.4,2.2);key.intensity=1.45;key.diffuse=new BABYLON.Color3(1,.75,.93);
-  const rim=new BABYLON.PointLight('rim',new BABYLON.Vector3(-1.1,1.55,-1.0),scene);rim.intensity=20;rim.diffuse=new BABYLON.Color3(.35,.35,1);
+  const key=new BABYLON.DirectionalLight('key',new BABYLON.Vector3(-.4,-1,-.55),scene);key.position=new BABYLON.Vector3(1.4,2.4,2.2);key.intensity=1.35;key.diffuse=new BABYLON.Color3(1,.78,.94);
+  shadowGen=new BABYLON.ShadowGenerator(768,key);shadowGen.useBlurExponentialShadowMap=true;shadowGen.blurKernel=10;shadowGen.bias=.002;
+  const rim=new BABYLON.PointLight('rim',new BABYLON.Vector3(-1.1,1.55,-1.0),scene);rim.intensity=13;rim.diffuse=new BABYLON.Color3(.38,.38,1);
+  scene.imageProcessingConfiguration.contrast=1.12;scene.imageProcessingConfiguration.exposure=1.04;scene.imageProcessingConfiguration.toneMappingEnabled=true;
   const floor=BABYLON.MeshBuilder.CreateDisc('floor',{radius:1.05,tessellation:72},scene);floor.rotation.x=Math.PI/2;floor.position.y=.005;
-  const fm=new BABYLON.StandardMaterial('floorMat',scene);fm.diffuseColor=new BABYLON.Color3(.05,.02,.08);fm.emissiveColor=new BABYLON.Color3(.13,.025,.18);fm.alpha=.8;floor.material=fm;
+  const fm=new BABYLON.StandardMaterial('floorMat',scene);fm.diffuseColor=new BABYLON.Color3(.05,.02,.08);fm.emissiveColor=new BABYLON.Color3(.10,.018,.14);fm.alpha=.86;floor.material=fm;floor.receiveShadows=true;
   engine.runRenderLoop(function(){animateRig();scene.render()});
   window.addEventListener('resize',function(){engine.resize()});
   window.avatarResize=function(){engine.resize()};
@@ -308,7 +332,7 @@ function ensureScene(){
 }
 function disposeAvatar(){
   if(faceOverlay){try{faceOverlay.dispose(false,true)}catch(e){}faceOverlay=null}
-  avatarMeshes.forEach(function(m){try{m.dispose(false,true)}catch(e){}});avatarMeshes=[];avatarRoot=null;avatarSkeleton=null;boneNodes={};boneBase={};
+  avatarMeshes.forEach(function(m){try{m.dispose(false,true)}catch(e){}});avatarMeshes=[];avatarRoot=null;avatarSkeleton=null;boneNodes={};boneBase={};bonePose={};lastAnimT=0;blinkNext=0;blinkStart=-1;
 }
 function normName(s){return(s||'').toLowerCase().replace(/[^a-z0-9]/g,'')}
 function findBone(tokens){
@@ -327,6 +351,7 @@ function setupBones(){
   captureBone('chest',['jbipcchest','chest']);
   captureBone('upperChest',['jbipcupperchest','upperchest']);
   captureBone('head',['jbipchead','head']);captureBone('neck',['jbipcneck','neck']);
+  captureBone('leye',['jadjlfaceeye','lefteye']);captureBone('reye',['jadrfaceeye','righteye']);
   captureBone('lua',['jbiplupperarm','leftupperarm','upperarml']);captureBone('rua',['jbiprupperarm','rightupperarm','upperarmr']);
   captureBone('lla',['jbipllowerarm','leftlowerarm','lowerarml']);captureBone('rla',['jbiprlowerarm','rightlowerarm','lowerarmr']);
   captureBone('lhand',['jbiplhand','lefthand','handl']);captureBone('rhand',['jbiprhand','righthand','handr']);
@@ -337,6 +362,11 @@ function setupBones(){
 function applyDelta(key,x,y,z){
   const n=boneNodes[key],b=boneBase[key];if(!n||!b)return;
   const q=BABYLON.Quaternion.FromEulerAngles(x||0,y||0,z||0);n.rotationQuaternion=b.multiply(q)
+}
+function applySmoothDelta(key,target,dt,speed){
+  const cur=bonePose[key]||(bonePose[key]=[0,0,0]),a=1-Math.exp(-(speed||8)*Math.max(.001,dt));
+  cur[0]+=(target[0]-cur[0])*a;cur[1]+=(target[1]-cur[1])*a;cur[2]+=(target[2]-cur[2])*a;
+  applyDelta(key,cur[0],cur[1],cur[2])
 }
 function poseMap(data){const p={};(data.pose||[]).forEach(function(r){p[r[0]]={x:r[1],y:r[2],z:r[3],c:r[4]}});return p}
 function dist(a,b){if(!a||!b)return 0;const x=a.x-b.x,y=a.y-b.y;return Math.sqrt(x*x+y*y)}
@@ -367,6 +397,15 @@ function tintMaterials(data){
     else if(m.diffuseColor)m.diffuseColor=BABYLON.Color3.Lerp(m.diffuseColor,c,blend)
   })
 }
+function preparePhotoFaceBase(){
+  if(!scene)return;
+  scene.materials.forEach(function(m){
+    const n=normName(m.name);
+    if(n.indexOf('facemouth')>=0||n.indexOf('eyewhite')>=0||n.indexOf('faceeyeline')>=0||n.indexOf('faceeyelash')>=0||n.indexOf('facebrow')>=0||n.indexOf('eyeiris')>=0||n.indexOf('eyehighlight')>=0||n.indexOf('eyeextra')>=0){
+      m.alpha=0;
+    }
+  })
+}
 function computeBounds(meshes){
   let minY=1e9,maxY=-1e9;meshes.forEach(function(m){if(!m.getBoundingInfo)return;try{m.computeWorldMatrix(true);const b=m.getBoundingInfo().boundingBox;minY=Math.min(minY,b.minimumWorld.y);maxY=Math.max(maxY,b.maximumWorld.y)}catch(e){}});
   if(!isFinite(minY)||!isFinite(maxY)||maxY-minY<.1)return{min:0,max:1.7,height:1.7};return{min:minY,max:maxY,height:maxY-minY}
@@ -382,24 +421,45 @@ async function loadRig(data){
     avatarRoot.position.y=-b.min*baseScale+.02;
     avatarRoot.rotation.y=rigFlipped?Math.PI:0;
     avatarRestY=avatarRoot.position.y;avatarRestRotY=avatarRoot.rotation.y;
-    setupBones();tintMaterials(data);createFaceOverlay(data);avatarReady=true;
-    const check=boneCheck();statusText.textContent=check.ok?'Rigged person active • movement ready':'Rig active • '+check.missing.length+' movement bones missing';camera.setTarget(new BABYLON.Vector3(0,1.02,0));camera.radius=2.45;basicNav('companion');
-    addMsg('ai',data.mode==='faceOnly'?'Your face-only avatar is active. I generated the full body from your selected body settings and attached your reconstructed face.':'Your rigged avatar is active. The skeleton now carries your detected body proportions, appearance colours and reconstructed face.');speak('Your rigged avatar is ready.');
+    setupBones();tintMaterials(data);preparePhotoFaceBase();createFaceOverlay(data);avatarReady=true;
+    avatarMeshes.forEach(function(m){try{if(shadowGen&&m&&m.getTotalVertices&&m.getTotalVertices()>0)shadowGen.addShadowCaster(m,true)}catch(e){}});
+    const check=boneCheck();statusText.textContent=check.ok?'Premium animation ready':'Rig active • '+check.missing.length+' movement bones missing';camera.setTarget(new BABYLON.Vector3(0,1.02,0));camera.radius=2.45;basicNav('companion');
+    addMsg('ai',data.mode==='faceOnly'?'Your premium face-only avatar is active. The body is generated and your actual photo face drives the animated head.':'Your premium avatar is active with body refinement and your actual photo face driving the animated head.');speak('Your rigged avatar is ready.');
   }catch(e){statusText.textContent='Rig load failed';window.onAvatarBuildError('3D rig failed: '+(e.message||e))}
 }
 function headParent(){return boneNodes.head||avatarRoot}
 function createFaceOverlay(data){
   const pts=data.frontFace||[],tris=data.frontTriangles||[];if(pts.length<100||tris.length<100)return;
   const max=Math.max.apply(null,pts.map(function(r){return r[0]})),pos=new Array((max+1)*3).fill(0),uv=new Array((max+1)*2).fill(0),meta=new Array(max+1),idx=[],depthBoost=(data.hasLeftProfile||data.hasRightProfile)?1.22:1.0;
-  pts.forEach(function(r){const i=r[0],u=r[1],v=r[2],z=r[3];pos[i*3]=(u-.5)*.30;pos[i*3+1]=(.5-v)*.39+.015;pos[i*3+2]=.115-z*.24*depthBoost;uv[i*2]=u;uv[i*2+1]=1-v;meta[i]={u:u,v:v}});
+  pts.forEach(function(r){const i=r[0],u=r[1],v=r[2],z=r[3];pos[i*3]=(u-.5)*.315;pos[i*3+1]=(.5-v)*.405+.012;pos[i*3+2]=-.115+z*.24*depthBoost;uv[i*2]=u;uv[i*2+1]=v;meta[i]={u:u,v:v}});
   tris.forEach(function(t){if(t.length>=3)idx.push(t[0],t[1],t[2])});
   const mesh=new BABYLON.Mesh('identityFace',scene),vd=new BABYLON.VertexData();vd.positions=pos;vd.indices=idx;vd.uvs=uv;vd.applyToMesh(mesh,true);
-  const mat=new BABYLON.StandardMaterial('identityFaceMat',scene),tex=new BABYLON.Texture(currentBuild.front,scene,false,false,BABYLON.Texture.BILINEAR_SAMPLINGMODE);mat.diffuseTexture=tex;mat.specularColor=new BABYLON.Color3(.04,.04,.04);mat.backFaceCulling=false;mat.emissiveColor=new BABYLON.Color3(.05,.03,.05);mesh.material=mat;
-  mesh.parent=headParent();mesh.position=new BABYLON.Vector3(0,.03,.015);faceOverlay=mesh;faceBase=pos.slice();faceMeta=meta;faceMap={};meta.forEach(function(m,i){if(m)faceMap[i]=m})
+  const faceTex=(currentBuild&&currentBuild.faceTexture)||currentBuild.front;
+  const mat=new BABYLON.StandardMaterial('identityFaceMat',scene),tex=new BABYLON.Texture(faceTex,scene,false,true,BABYLON.Texture.BILINEAR_SAMPLINGMODE);mat.diffuseTexture=tex;mat.opacityTexture=tex;mat.useAlphaFromDiffuseTexture=true;mat.specularColor=new BABYLON.Color3(.025,.025,.025);mat.backFaceCulling=false;mat.emissiveColor=new BABYLON.Color3(.025,.018,.025);mesh.material=mat;
+  mesh.parent=headParent();mesh.position=new BABYLON.Vector3(0,.025,-.012);mesh.scaling=new BABYLON.Vector3(1.06,1.06,1.0);faceOverlay=mesh;faceBase=pos.slice();faceMeta=meta;faceMap={};meta.forEach(function(m,i){if(m)faceMap[i]=m});
+  blinkNext=performance.now()/1000+1.4
+}
+function pointMove(arr,i,dx,dy,dz){if(!faceMap[i])return;arr[i*3]+=(dx||0);arr[i*3+1]+=(dy||0);arr[i*3+2]+=(dz||0)}
+function closeEye(arr,upper,lower,a){
+  if(!faceMap[upper]||!faceMap[lower])return;const uy=faceBase[upper*3+1],ly=faceBase[lower*3+1],mid=(uy+ly)/2;
+  arr[upper*3+1]=uy+(mid-uy)*a;arr[lower*3+1]=ly+(mid-ly)*a
 }
 function animateFace(t){
-  if(!faceOverlay||!faceBase||!faceMeta)return;const arr=faceBase.slice(),m1=faceMap[13],m2=faceMap[14],mouth=m1&&m2?{u:(m1.u+m2.u)/2,v:(m1.v+m2.v)/2}:{u:.5,v:.68},open=talking?(.5+.5*Math.abs(Math.sin(t*11))):.03;
-  for(let i=0;i<faceMeta.length;i++){const m=faceMeta[i];if(!m)continue;const du=m.u-mouth.u,dv=m.v-mouth.v,d=Math.sqrt(du*du+dv*dv);if(d<.11){const w=1-d/.11,dir=m.v>mouth.v?-1:1;arr[i*3+1]+=dir*open*w*.018}}
+  if(!faceOverlay||!faceBase||!faceMeta)return;
+  const arr=faceBase.slice();
+  if(blinkStart<0&&t>=blinkNext){blinkStart=t;blinkNext=t+2.2+1.8*Math.abs(Math.sin(t*1.731))}
+  let blink=0;
+  if(blinkStart>=0){const p=(t-blinkStart)/.19;if(p>=1){blinkStart=-1}else{const q=p<.5?p*2:(1-p)*2;blink=Math.sin(q*Math.PI/2)}}
+  closeEye(arr,159,145,blink);closeEye(arr,158,153,blink*.92);closeEye(arr,160,144,blink*.78);
+  closeEye(arr,386,374,blink);closeEye(arr,385,380,blink*.92);closeEye(arr,387,373,blink*.78);
+
+  const v=visemeAt(t),talkPulse=talking?(.55+.45*Math.sin(t*5.7)):0;
+  const open=clamp(v.open*(.78+.22*talkPulse),0,.82),wide=v.wide,round=v.round;
+  pointMove(arr,13,0,open*.017,0);pointMove(arr,14,0,-open*.022,0);pointMove(arr,152,0,-open*.010,0);
+  pointMove(arr,61,-wide*.010+round*.008,(talking?1:0)*.0025,0);pointMove(arr,291,wide*.010-round*.008,(talking?1:0)*.0025,0);
+  pointMove(arr,78,round*.006,0,0);pointMove(arr,308,-round*.006,0,0);
+  const brow=(talking?.0035:.0015)*Math.sin(t*2.3);
+  pointMove(arr,70,0,brow,0);pointMove(arr,300,0,brow,0);pointMove(arr,105,0,brow*.7,0);pointMove(arr,334,0,brow*.7,0);
   faceOverlay.updateVerticesData(BABYLON.VertexBuffer.PositionKind,arr,false,false)
 }
 function boneCheck(){
@@ -469,24 +529,37 @@ function runMovementSelfTest(){
   next()
 }
 
+function premiumIdlePose(t,voice){
+  const breath=Math.sin(t*1.45),sway=Math.sin(t*.43),micro=Math.sin(t*.91+1.2),p={};
+  p.hips=[.004*breath,.012*sway,.010*sway];
+  p.spine=[.012*breath,.006*sway,.012*sway];
+  p.chest=[-.017*breath,-.010*sway,-.013*sway];
+  p.upperChest=[.010*breath,.006*micro,.007*sway];
+  p.neck=[.006*micro,.012*Math.sin(t*.31),.006*sway];
+  p.head=[.018*Math.sin(t*.58),.035*Math.sin(t*.27)+.012*Math.sin(t*1.1),.012*Math.sin(t*.47)];
+  p.lua=[0,0,.025*sway-voice*(.05+.035*Math.sin(t*2.6))];
+  p.rua=[0,0,-.025*sway+voice*(.07+.045*Math.sin(t*2.2+1))];
+  p.lla=[0,0,voice*.045*Math.sin(t*3.4)];
+  p.rla=[0,0,-voice*.055*Math.sin(t*3.1+1)];
+  p.lleg=[.006*sway,0,0];p.rleg=[-.006*sway,0,0];
+  const gazeYaw=.055*Math.sin(t*.29)+.018*Math.sin(t*.83),gazePitch=.025*Math.sin(t*.37+1);
+  p.leye=[gazePitch,gazeYaw,0];p.reye=[gazePitch,gazeYaw,0];
+  return p
+}
 function animateRig(){
-  if(!avatarReady)return;const t=performance.now()/1000,voice=talking?1:0,m=motionPose(t);
-  const base={
-    head:[Math.sin(t*.7)*.025,Math.sin(t*.42)*.05,Math.sin(t*.55)*.02],
-    neck:[Math.sin(t*.5)*.008,0,Math.sin(t*.45)*.008],
-    lua:[0,0,.035*Math.sin(t*.85)-voice*.06*Math.sin(t*4.1)],
-    rua:[0,0,-.035*Math.sin(t*.85)+voice*.11*Math.sin(t*4.4)],
-    lla:[0,0,voice*.07*Math.sin(t*5.0)],
-    rla:[0,0,-voice*.09*Math.sin(t*5.2)],
-    lleg:[.008*Math.sin(t*.7),0,0],rleg:[-.008*Math.sin(t*.7),0,0]
-  };
-  const keys=['hips','spine','chest','upperChest','head','neck','lua','rua','lla','rla','lhand','rhand','lleg','rleg','lknee','rknee','lfoot','rfoot'];
-  keys.forEach(function(k){const a=base[k]||[0,0,0],b=m[k]||[0,0,0];applyDelta(k,a[0]+b[0],a[1]+b[1],a[2]+b[2])});
+  if(!avatarReady)return;
+  const t=performance.now()/1000,dt=lastAnimT?Math.min(.05,t-lastAnimT):.016;lastAnimT=t;
+  const voice=talking?1:0,m=motionPose(t),base=premiumIdlePose(t,voice);
+  const keys=['hips','spine','chest','upperChest','head','neck','leye','reye','lua','rua','lla','rla','lhand','rhand','lleg','rleg','lknee','rknee','lfoot','rfoot'];
+  keys.forEach(function(k){
+    const a=base[k]||[0,0,0],b=m[k]||[0,0,0],target=[a[0]+b[0],a[1]+b[1],a[2]+b[2]];
+    applySmoothDelta(k,target,dt,(k==='head'||k==='neck'||k==='leye'||k==='reye')?11:7)
+  });
   if(avatarRoot){
-    let y=avatarRestY,rot=avatarRestRotY;
-    if(motion.name==='sit')y=avatarRestY-.28;
-    if(motion.name==='dance')y=avatarRestY+.025*Math.abs(Math.sin((t-motion.start)*5));
-    avatarRoot.position.y=y;avatarRoot.rotation.y=rot;
+    let targetY=avatarRestY;
+    if(motion.name==='sit')targetY=avatarRestY-.28;
+    if(motion.name==='dance')targetY=avatarRestY+.022*Math.abs(Math.sin((t-motion.start)*5));
+    const a=1-Math.exp(-7*dt);avatarRoot.position.y+=(targetY-avatarRoot.position.y)*a;avatarRoot.rotation.y=avatarRestRotY;
   }
   animateFace(t)
 }
@@ -512,7 +585,7 @@ $('buildBtn').onclick=async function(){
 
   if(creationMode==='face'){
     const bodyPreset=preset();
-    currentBuild={front:front,body:'',left:left,right:right,bodyPreset:bodyPreset};
+    currentBuild={front:front,faceTexture:croppedFrontMasked(),body:'',left:left,right:right,bodyPreset:bodyPreset};
     buildState.innerHTML='<span class="spinner"></span>Analyzing face and generating full rigged body…';
     try{
       if(window.AndroidBridge&&AndroidBridge.buildFaceAvatar)AndroidBridge.buildFaceAvatar(front,left,right);
@@ -522,7 +595,7 @@ $('buildBtn').onclick=async function(){
   }
 
   const body=await normalized(photos.body,1024);
-  currentBuild={front:front,body:body,left:left,right:right,bodyPreset:null};
+  currentBuild={front:front,faceTexture:croppedFrontMasked(),body:body,left:left,right:right,bodyPreset:null};
   buildState.innerHTML='<span class="spinner"></span>Analyzing identity, body proportions and rig…';
   try{
     if(window.AndroidBridge&&AndroidBridge.buildRiggedAvatar)AndroidBridge.buildRiggedAvatar(body,front,left,right);
