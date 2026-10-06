@@ -74,9 +74,9 @@ main{min-height:0}.page{display:none;height:100%}.page.active{display:block}
 <section id="create" class="page">
   <div class="creator">
     <div class="hero">
-      <div class="eyebrow">CREATOR V0.7</div>
+      <div class="eyebrow">CREATOR V0.8</div>
       <h2>Build a real rigged character</h2>
-      <p>Choose how much reference material you want to provide. Face Only generates the body automatically; Quick and Pro can use a real body photo to refine proportions and appearance.</p>
+      <p>Choose how much reference material you want to provide. The person photo is now baked into the real 3D head skin and animated with the humanoid's own facial morphs — no separate photo mask.</p>
       <div class="modeRow">
         <button id="modeFace" class="mode active"><b>Face Only</b>Front face; body generated automatically.</button>
         <button id="modeQuick" class="mode"><b>Quick Build</b>Front face + full body.</button>
@@ -309,7 +309,7 @@ window.onNativeTalking=function(v){talking=!!v;if(talking)speechStart=performanc
 
 /* ---------------- Babylon rig ---------------- */
 const canvas=$('scene');
-let engine=null,scene=null,camera=null,avatarRoot=null,avatarMeshes=[],avatarSkeleton=null,boneNodes={},boneBase={},faceOverlay=null,faceBase=null,faceMeta=null,faceMap={},faceFeatures=null,sceneReady=false,shadowGen=null;
+let engine=null,scene=null,camera=null,avatarRoot=null,avatarMeshes=[],avatarSkeleton=null,boneNodes={},boneBase={},faceOverlay=null,faceBase=null,faceMeta=null,faceMap={},faceFeatures=null,identityFaceMesh=null,identityFaceTexture=null,identityMorphManagers=[],morphState={},sceneReady=false,shadowGen=null;
 let motion={name:'idle',start:0,duration:0,persistent:false},avatarRestY=0,avatarRestRotY=0,movementTestTimer=null,rigFlipped=true;
 let bonePose={},lastAnimT=0,blinkNext=0,blinkStart=-1;
 function hexColor(h){try{return BABYLON.Color3.FromHexString(h)}catch(e){return new BABYLON.Color3(.7,.6,.6)}}
@@ -335,7 +335,7 @@ function ensureScene(){
 }
 function disposeAvatar(){
   if(faceOverlay){try{faceOverlay.dispose(false,true)}catch(e){}faceOverlay=null}
-  avatarMeshes.forEach(function(m){try{m.dispose(false,true)}catch(e){}});avatarMeshes=[];avatarRoot=null;avatarSkeleton=null;boneNodes={};boneBase={};bonePose={};faceFeatures=null;lastAnimT=0;blinkNext=0;blinkStart=-1;
+  avatarMeshes.forEach(function(m){try{m.dispose(false,true)}catch(e){}});avatarMeshes=[];avatarRoot=null;avatarSkeleton=null;boneNodes={};boneBase={};bonePose={};faceFeatures=null;identityFaceMesh=null;identityMorphManagers=[];morphState={};if(identityFaceTexture){try{identityFaceTexture.dispose()}catch(e){}identityFaceTexture=null}lastAnimT=0;blinkNext=0;blinkStart=-1;
 }
 function normName(s){return(s||'').toLowerCase().replace(/[^a-z0-9]/g,'')}
 function findBone(tokens){
@@ -409,6 +409,152 @@ function preparePhotoFaceBase(){
     }
   })
 }
+function faceSkinMaterial(){
+  let found=null;
+  scene.materials.forEach(function(m){
+    if(found)return;
+    const n=normName(m.name);
+    if(n.indexOf('face00skin')>=0||n.indexOf('faceskin')>=0)found=m
+  });
+  return found
+}
+function findIdentityFaceMesh(){
+  let best=null;
+  avatarMeshes.forEach(function(m){
+    if(best||!m||!m.getVerticesData)return;
+    const n=normName(m.name);
+    const p=m.getVerticesData(BABYLON.VertexBuffer.PositionKind);
+    const uv=m.getVerticesData(BABYLON.VertexBuffer.UVKind);
+    if(n.indexOf('face')>=0&&p&&uv&&p.length>200)best=m
+  });
+  if(!best){
+    avatarMeshes.forEach(function(m){
+      if(best||!m||!m.getVerticesData)return;
+      const p=m.getVerticesData(BABYLON.VertexBuffer.PositionKind);
+      const uv=m.getVerticesData(BABYLON.VertexBuffer.UVKind);
+      if(p&&uv&&m.morphTargetManager&&p.length>200)best=m
+    })
+  }
+  return best
+}
+function affineTriangle(ctx,img,s0,s1,s2,d0,d1,d2,alpha){
+  const den=s0.x*(s1.y-s2.y)+s1.x*(s2.y-s0.y)+s2.x*(s0.y-s1.y);
+  if(Math.abs(den)<.001)return;
+  const a=(d0.x*(s1.y-s2.y)+d1.x*(s2.y-s0.y)+d2.x*(s0.y-s1.y))/den;
+  const c=(d0.x*(s2.x-s1.x)+d1.x*(s0.x-s2.x)+d2.x*(s1.x-s0.x))/den;
+  const e=(d0.x*(s1.x*s2.y-s2.x*s1.y)+d1.x*(s2.x*s0.y-s0.x*s2.y)+d2.x*(s0.x*s1.y-s1.x*s0.y))/den;
+  const b=(d0.y*(s1.y-s2.y)+d1.y*(s2.y-s0.y)+d2.y*(s0.y-s1.y))/den;
+  const d=(d0.y*(s2.x-s1.x)+d1.y*(s0.x-s2.x)+d2.y*(s1.x-s0.x))/den;
+  const f=(d0.y*(s1.x*s2.y-s2.x*s1.y)+d1.y*(s2.x*s0.y-s0.x*s2.y)+d2.y*(s0.x*s1.y-s1.x*s0.y))/den;
+  ctx.save();
+  ctx.beginPath();ctx.moveTo(d0.x,d0.y);ctx.lineTo(d1.x,d1.y);ctx.lineTo(d2.x,d2.y);ctx.closePath();ctx.clip();
+  ctx.globalAlpha=alpha;
+  ctx.setTransform(a,b,c,d,e,f);
+  ctx.drawImage(img,0,0);
+  ctx.restore()
+}
+function buildHeadAtlas(data){
+  return new Promise(function(resolve,reject){
+    const mesh=findIdentityFaceMesh();
+    if(!mesh){reject(new Error('No 3D face mesh found in the humanoid.'));return}
+    const positions=mesh.getVerticesData(BABYLON.VertexBuffer.PositionKind),uvs=mesh.getVerticesData(BABYLON.VertexBuffer.UVKind),indices=mesh.getIndices();
+    if(!positions||!uvs||!indices){reject(new Error('3D face mesh data is incomplete.'));return}
+
+    const img=new Image();
+    img.onload=function(){
+      try{
+        identityFaceMesh=mesh;
+        const S=1024,canvas=document.createElement('canvas');canvas.width=canvas.height=S;
+        const ctx=canvas.getContext('2d'),skin=hexColor(data.skinColor||'#C79C8B');
+        const sr=Math.round(skin.r*255),sg=Math.round(skin.g*255),sb=Math.round(skin.b*255);
+        ctx.fillStyle='rgb('+sr+','+sg+','+sb+')';ctx.fillRect(0,0,S,S);
+
+        const pts=data.frontFace||[],us=pts.map(function(r){return r[1]}),vs=pts.map(function(r){return r[2]});
+        const su0=Math.max(0,Math.min.apply(null,us)-.06),su1=Math.min(1,Math.max.apply(null,us)+.06);
+        const sv0=Math.max(0,Math.min.apply(null,vs)-.08),sv1=Math.min(1,Math.max.apply(null,vs)+.065);
+
+        let minZ=1e9,maxZ=-1e9;
+        for(let i=2;i<positions.length;i+=3){minZ=Math.min(minZ,positions[i]);maxZ=Math.max(maxZ,positions[i])}
+        const zr=Math.max(.0001,maxZ-minZ),frontCut=minZ+zr*.53;
+        let minX=1e9,maxX=-1e9,minY=1e9,maxY=-1e9;
+        for(let i=0;i<positions.length;i+=3){
+          if(positions[i+2]<=frontCut){
+            minX=Math.min(minX,positions[i]);maxX=Math.max(maxX,positions[i]);
+            minY=Math.min(minY,positions[i+1]);maxY=Math.max(maxY,positions[i+1])
+          }
+        }
+        if(!isFinite(minX)||maxX-minX<.001){reject(new Error('Could not map the 3D head front.'));return}
+        const cx=(minX+maxX)/2,cy=(minY+maxY)/2,rx=(maxX-minX)/2,ry=(maxY-minY)/2;
+
+        for(let t=0;t<indices.length;t+=3){
+          const ia=indices[t],ib=indices[t+1],ic=indices[t+2];
+          const ax=positions[ia*3],ay=positions[ia*3+1],az=positions[ia*3+2];
+          const bx=positions[ib*3],by=positions[ib*3+1],bz=positions[ib*3+2];
+          const cxp=positions[ic*3],cyp=positions[ic*3+1],cz=positions[ic*3+2];
+          const z=(az+bz+cz)/3;if(z>frontCut)continue;
+          const mx=(ax+bx+cxp)/3,my=(ay+by+cyp)/3;
+          const ex=(mx-cx)/(rx||1),ey=(my-cy)/(ry||1),ellipse=ex*ex+ey*ey*.88;
+          if(ellipse>1.12)continue;
+          const frontness=clamp((frontCut-z)/(zr*.42),0,1),edge=clamp((1.12-ellipse)/.35,0,1),alpha=frontness*edge;
+          if(alpha<.03)continue;
+
+          function src(vx,vy){
+            const nu=clamp((vx-minX)/(maxX-minX),0,1),nv=clamp(1-(vy-minY)/(maxY-minY),0,1);
+            return{x:(su0+nu*(su1-su0))*img.width,y:(sv0+nv*(sv1-sv0))*img.height}
+          }
+          function dst(i){return{x:uvs[i*2]*S,y:(1-uvs[i*2+1])*S}}
+          affineTriangle(ctx,img,src(ax,ay),src(bx,by),src(cxp,cyp),dst(ia),dst(ib),dst(ic),alpha)
+        }
+
+        const dyn=new BABYLON.DynamicTexture('identityHeadAtlas',{width:S,height:S},scene,false,BABYLON.Texture.BILINEAR_SAMPLINGMODE);
+        const dctx=dyn.getContext();dctx.clearRect(0,0,S,S);dctx.drawImage(canvas,0,0);dyn.update(false);
+        dyn.wrapU=BABYLON.Texture.CLAMP_ADDRESSMODE;dyn.wrapV=BABYLON.Texture.CLAMP_ADDRESSMODE;
+        identityFaceTexture=dyn;
+        const mat=faceSkinMaterial();
+        if(!mat){reject(new Error('Could not find the 3D face skin material.'));return}
+        if('albedoTexture' in mat){mat.albedoTexture=dyn;mat.albedoColor=BABYLON.Color3.White()}
+        if('diffuseTexture' in mat){mat.diffuseTexture=dyn;mat.diffuseColor=BABYLON.Color3.White()}
+        if('emissiveTexture' in mat)mat.emissiveTexture=null;
+
+        identityMorphManagers=[];
+        avatarMeshes.forEach(function(m){
+          if(m&&m.morphTargetManager&&normName(m.name).indexOf('face')>=0&&identityMorphManagers.indexOf(m.morphTargetManager)<0)identityMorphManagers.push(m.morphTargetManager)
+        });
+        if(!identityMorphManagers.length&&mesh.morphTargetManager)identityMorphManagers.push(mesh.morphTargetManager);
+        morphState={};
+        resolve()
+      }catch(e){reject(e)}
+    };
+    img.onerror=function(){reject(new Error('Could not load the selected face photo for 3D texturing.'))};
+    img.src=(currentBuild&&currentBuild.front)||''
+  })
+}
+function setMorph(index,value,speed){
+  const target=clamp(value,0,1),cur=morphState[index]||0,a=clamp(speed||.35,0,1),next=cur+(target-cur)*a;morphState[index]=next;
+  identityMorphManagers.forEach(function(mm){try{if(index<mm.numTargets)mm.getTarget(index).influence=next}catch(e){}})
+}
+function animateIdentityHead(t){
+  if(!identityMorphManagers.length)return;
+  if(blinkStart<0&&t>=blinkNext){blinkStart=t;blinkNext=t+2.4+1.8*Math.abs(Math.sin(t*1.91))}
+  let blink=0;
+  if(blinkStart>=0){const p=(t-blinkStart)/.18;if(p>=1){blinkStart=-1}else{const q=p<.5?p*2:(1-p)*2;blink=Math.sin(q*Math.PI/2)}}
+  setMorph(12,blink,.72);
+
+  let a=0,i=0,u=0,e=0,o=0;
+  if(talking&&speechText){
+    const idx=Math.floor(Math.max(0,t-speechStart)*12)%Math.max(1,speechText.length),c=speechText[idx]||' ';
+    if(/[a]/.test(c))a=.88;
+    else if(/[e]/.test(c))e=.75;
+    else if(/[iy]/.test(c))i=.72;
+    else if(/[ouqw]/.test(c))o=.76;
+    else if(/[fv]/.test(c))i=.22;
+    else if(/[bmp]/.test(c)){}
+    else if(/[lrtnsdkgcjxz]/.test(c)){a=.28;i=.18}
+    else u=.14
+  }
+  setMorph(29,a,.40);setMorph(30,i,.40);setMorph(31,u,.40);setMorph(32,e,.40);setMorph(33,o,.40);
+  setMorph(2,talking?.05:0,.18)
+}
 function computeBounds(meshes){
   let minY=1e9,maxY=-1e9;meshes.forEach(function(m){if(!m.getBoundingInfo)return;try{m.computeWorldMatrix(true);const b=m.getBoundingInfo().boundingBox;minY=Math.min(minY,b.minimumWorld.y);maxY=Math.max(maxY,b.maximumWorld.y)}catch(e){}});
   if(!isFinite(minY)||!isFinite(maxY)||maxY-minY<.1)return{min:0,max:1.7,height:1.7};return{min:minY,max:maxY,height:maxY-minY}
@@ -424,77 +570,13 @@ async function loadRig(data){
     avatarRoot.position.y=-b.min*baseScale+.02;
     avatarRoot.rotation.y=rigFlipped?Math.PI:0;
     avatarRestY=avatarRoot.position.y;avatarRestRotY=avatarRoot.rotation.y;
-    setupBones();tintMaterials(data);preparePhotoFaceBase();createFaceOverlay(data);avatarReady=true;
+    setupBones();tintMaterials(data);preparePhotoFaceBase();await buildHeadAtlas(data);avatarReady=true;
     avatarMeshes.forEach(function(m){try{if(shadowGen&&m&&m.getTotalVertices&&m.getTotalVertices()>0)shadowGen.addShadowCaster(m,true)}catch(e){}});
     const check=boneCheck();statusText.textContent=check.ok?'Premium animation ready':'Rig active • '+check.missing.length+' movement bones missing';camera.setTarget(new BABYLON.Vector3(0,1.02,0));camera.radius=2.45;basicNav('companion');
     speak('Avatar ready.');
   }catch(e){statusText.textContent='Rig load failed';window.onAvatarBuildError('3D rig failed: '+(e.message||e))}
 }
 function headParent(){return boneNodes.head||avatarRoot}
-function createFaceOverlay(data){
-  const pts=data.frontFace||[];if(pts.length<100)return;
-  const lm={};pts.forEach(function(r){lm[r[0]]={u:r[1],v:r[2]}});
-  const us=pts.map(function(r){return r[1]}),vs=pts.map(function(r){return r[2]});
-  let u0=Math.max(0,Math.min.apply(null,us)-.075),u1=Math.min(1,Math.max.apply(null,us)+.075);
-  let v0=Math.max(0,Math.min.apply(null,vs)-.095),v1=Math.min(1,Math.max.apply(null,vs)+.085);
-  const C=30,R=38,pos=[],uv=[],idx=[],meta=[];
-  for(let y=0;y<=R;y++){
-    for(let x=0;x<=C;x++){
-      const u=x/C,v=y/R,nx=(u-.5)/.5,ny=(v-.50)/.50;
-      const curve=Math.max(0,1-(nx*nx*.90+ny*ny*.56));
-      pos.push((u-.5)*.285,(.5-v)*.365+.008,-.090-.018*curve);
-      uv.push(u0+u*(u1-u0),v0+v*(v1-v0));meta.push({u:u,v:v})
-    }
-  }
-  for(let y=0;y<R;y++)for(let x=0;x<C;x++){
-    const i=y*(C+1)+x,a=i,b=i+1,c=i+C+1,d=i+C+2;idx.push(a,c,b,b,c,d)
-  }
-  const mesh=new BABYLON.Mesh('identityFace',scene),vd=new BABYLON.VertexData();
-  vd.positions=pos;vd.indices=idx;vd.uvs=uv;vd.applyToMesh(mesh,true);
-  const faceTex=(currentBuild&&currentBuild.faceTexture)||currentBuild.front;
-  const mat=new BABYLON.StandardMaterial('identityFaceMat',scene),tex=new BABYLON.Texture(faceTex,scene,false,false,BABYLON.Texture.BILINEAR_SAMPLINGMODE);
-  mat.diffuseTexture=tex;mat.opacityTexture=tex;mat.useAlphaFromDiffuseTexture=true;mat.specularColor=new BABYLON.Color3(.018,.018,.018);mat.backFaceCulling=false;mat.emissiveColor=new BABYLON.Color3(.018,.012,.018);mesh.material=mat;
-  mesh.parent=headParent();mesh.position=new BABYLON.Vector3(0,.020,-.016);mesh.scaling=new BABYLON.Vector3(.94,.94,1.0);
-  faceOverlay=mesh;faceBase=pos.slice();faceMeta=meta;faceMap=lm;
-  const av=function(ids,axis,fb){let n=0,s=0;ids.forEach(function(i){if(lm[i]){s+=lm[i][axis];n++}});return n?s/n:fb};
-  faceFeatures={
-    le:{u:av([33,133,159,145],'u',.35),v:av([33,133,159,145],'v',.42)},
-    re:{u:av([362,263,386,374],'u',.65),v:av([362,263,386,374],'v',.42)},
-    mouth:{u:av([61,291,13,14],'u',.50),v:av([61,291,13,14],'v',.68)}
-  };
-  blinkNext=performance.now()/1000+1.4
-}
-function deformRegion(arr,feature,rx,ry,fn){
-  if(!feature)return;
-  for(let i=0;i<faceMeta.length;i++){
-    const m=faceMeta[i],dx=(m.u-feature.u)/rx,dy=(m.v-feature.v)/ry,d=dx*dx+dy*dy;
-    if(d>=1)continue;const w=(1-d)*(1-d);fn(i,m,w,dx,dy)
-  }
-}
-function animateFace(t){
-  if(!faceOverlay||!faceBase||!faceMeta)return;
-  const arr=faceBase.slice();
-  if(blinkStart<0&&t>=blinkNext){blinkStart=t;blinkNext=t+2.2+1.8*Math.abs(Math.sin(t*1.731))}
-  let blink=0;
-  if(blinkStart>=0){const p=(t-blinkStart)/.18;if(p>=1){blinkStart=-1}else{const q=p<.5?p*2:(1-p)*2;blink=Math.sin(q*Math.PI/2)}}
-  [faceFeatures&&faceFeatures.le,faceFeatures&&faceFeatures.re].forEach(function(e){
-    deformRegion(arr,e,.115,.060,function(i,m,w){
-      const targetY=(.5-e.v)*.405+.010;
-      arr[i*3+1]+=(targetY-arr[i*3+1])*blink*w*.72
-    })
-  });
-
-  const v=visemeAt(t),pulse=talking?(.78+.22*Math.sin(t*5.7)):0;
-  const open=clamp(v.open*pulse,0,.75),wide=v.wide,round=v.round,mouth=faceFeatures&&faceFeatures.mouth;
-  deformRegion(arr,mouth,.17,.11,function(i,m,w,dx,dy){
-    if(dy>0)arr[i*3+1]-=open*.020*w*Math.min(1,dy);
-    else arr[i*3+1]+=open*.006*w*Math.min(1,-dy);
-    arr[i*3]+=Math.sign(dx)*wide*.006*w;
-    arr[i*3]-=Math.sign(dx)*round*.007*w;
-    arr[i*3+2]-=open*.002*w
-  });
-  faceOverlay.updateVerticesData(BABYLON.VertexBuffer.PositionKind,arr,false,false)
-}
 function boneCheck(){
   const required=['hips','spine','chest','head','lua','rua','lla','rla','lleg','rleg','lknee','rknee'];
   const missing=required.filter(function(k){return !boneNodes[k]});
@@ -595,7 +677,7 @@ function animateRig(){
     if(motion.name==='dance')targetY=avatarRestY+.022*Math.abs(Math.sin((t-motion.start)*5));
     const a=1-Math.exp(-7*dt);avatarRoot.position.y+=(targetY-avatarRoot.position.y)*a;avatarRoot.rotation.y=avatarRestRotY;
   }
-  animateFace(t)
+  animateIdentityHead(t)
 }
 $('flipRig').onclick=function(){rigFlipped=!rigFlipped;if(avatarRoot){avatarRestRotY=rigFlipped?Math.PI:0;avatarRoot.rotation.y=avatarRestRotY}};
 $('resetView').onclick=function(){if(camera){camera.alpha=Math.PI/2;camera.beta=Math.PI/2.14;camera.radius=2.45;camera.setTarget(new BABYLON.Vector3(0,1.02,0))}};
