@@ -298,47 +298,151 @@ public class MainActivity extends Activity {
         return arr;
     }
 
-    private void buildFullAvatar(String fullDataUrl, String faceDataUrl) {
+    private FaceMesh firstMesh(List<FaceMesh> meshes) {
+        return (meshes == null || meshes.isEmpty()) ? null : meshes.get(0);
+    }
+
+    private void buildRiggedAvatar(
+            String fullDataUrl,
+            String frontDataUrl,
+            String leftDataUrl,
+            String rightDataUrl) {
         if (!ensureVisionEngines()) return;
 
-        Bitmap full = decodeDataUrl(fullDataUrl, 640);
-        Bitmap face = decodeDataUrl(faceDataUrl, 512);
+        Bitmap full = decodeDataUrl(fullDataUrl, 768);
+        Bitmap front = decodeDataUrl(frontDataUrl, 512);
+        Bitmap left = decodeDataUrl(leftDataUrl, 512);
+        Bitmap right = decodeDataUrl(rightDataUrl, 512);
 
-        if (full == null || face == null) {
-            jsAvatarError("Could not read the selected photo.");
+        if (full == null || front == null) {
+            jsAvatarError("A full-body photo and front face photo are required.");
             return;
         }
 
         InputImage fullInput = InputImage.fromBitmap(full, 0);
-        InputImage faceInput = InputImage.fromBitmap(face, 0);
+        InputImage frontInput = InputImage.fromBitmap(front, 0);
 
         poseDetector.process(fullInput)
-                .addOnSuccessListener(pose -> {
-                    segmenter.process(fullInput)
-                            .addOnSuccessListener(mask -> {
-                                faceMeshDetector.process(faceInput)
-                                        .addOnSuccessListener(meshes -> {
-                                            FaceMesh mesh =
-                                                    (meshes == null || meshes.isEmpty())
-                                                            ? null : meshes.get(0);
-                                            sendAvatarResult(full, face, pose, mask, mesh);
-                                        })
-                                        .addOnFailureListener(e ->
-                                                sendAvatarResult(full, face, pose, mask, null));
-                            })
-                            .addOnFailureListener(e ->
-                                    jsAvatarError("Person cut-out failed: " + e.getMessage()));
-                })
+                .addOnSuccessListener(pose ->
+                        segmenter.process(fullInput)
+                                .addOnSuccessListener(mask ->
+                                        faceMeshDetector.process(frontInput)
+                                                .addOnSuccessListener(frontMeshes -> {
+                                                    FaceMesh frontMesh = firstMesh(frontMeshes);
+                                                    if (frontMesh == null) {
+                                                        jsAvatarError("No clear face found in the front photo.");
+                                                        return;
+                                                    }
+                                                    processOptionalProfiles(
+                                                            full, front, left, right,
+                                                            pose, mask, frontMesh);
+                                                })
+                                                .addOnFailureListener(e ->
+                                                        jsAvatarError("Front face analysis failed: " + e.getMessage())))
+                                .addOnFailureListener(e ->
+                                        jsAvatarError("Person cut-out failed: " + e.getMessage())))
                 .addOnFailureListener(e ->
                         jsAvatarError("Full-body detection failed: " + e.getMessage()));
     }
 
-    private void sendAvatarResult(
+    private void processOptionalProfiles(
             Bitmap full,
-            Bitmap face,
+            Bitmap front,
+            Bitmap left,
+            Bitmap right,
             Pose pose,
             SegmentationMask mask,
-            FaceMesh mesh) {
+            FaceMesh frontMesh) {
+
+        if (left == null && right == null) {
+            sendRiggedAvatarResult(full, front, pose, mask, frontMesh, null, null);
+            return;
+        }
+
+        if (left != null) {
+            faceMeshDetector.process(InputImage.fromBitmap(left, 0))
+                    .addOnSuccessListener(leftMeshes -> {
+                        FaceMesh leftMesh = firstMesh(leftMeshes);
+                        if (right != null) {
+                            faceMeshDetector.process(InputImage.fromBitmap(right, 0))
+                                    .addOnSuccessListener(rightMeshes ->
+                                            sendRiggedAvatarResult(
+                                                    full, front, pose, mask, frontMesh,
+                                                    leftMesh, firstMesh(rightMeshes)))
+                                    .addOnFailureListener(e ->
+                                            sendRiggedAvatarResult(
+                                                    full, front, pose, mask, frontMesh,
+                                                    leftMesh, null));
+                        } else {
+                            sendRiggedAvatarResult(
+                                    full, front, pose, mask, frontMesh, leftMesh, null);
+                        }
+                    })
+                    .addOnFailureListener(e -> {
+                        if (right != null) {
+                            faceMeshDetector.process(InputImage.fromBitmap(right, 0))
+                                    .addOnSuccessListener(rightMeshes ->
+                                            sendRiggedAvatarResult(
+                                                    full, front, pose, mask, frontMesh,
+                                                    null, firstMesh(rightMeshes)))
+                                    .addOnFailureListener(err ->
+                                            sendRiggedAvatarResult(
+                                                    full, front, pose, mask, frontMesh,
+                                                    null, null));
+                        } else {
+                            sendRiggedAvatarResult(
+                                    full, front, pose, mask, frontMesh, null, null);
+                        }
+                    });
+        } else {
+            faceMeshDetector.process(InputImage.fromBitmap(right, 0))
+                    .addOnSuccessListener(rightMeshes ->
+                            sendRiggedAvatarResult(
+                                    full, front, pose, mask, frontMesh,
+                                    null, firstMesh(rightMeshes)))
+                    .addOnFailureListener(e ->
+                            sendRiggedAvatarResult(
+                                    full, front, pose, mask, frontMesh,
+                                    null, null));
+        }
+    }
+
+    private int sampleAverageColor(Bitmap bitmap, float cx, float cy, float radius) {
+        if (bitmap == null) return Color.rgb(180, 150, 140);
+        int w = bitmap.getWidth(), h = bitmap.getHeight();
+        int x0 = Math.max(0, (int)((cx - radius) * w));
+        int x1 = Math.min(w - 1, (int)((cx + radius) * w));
+        int y0 = Math.max(0, (int)((cy - radius) * h));
+        int y1 = Math.min(h - 1, (int)((cy + radius) * h));
+
+        long rr = 0, gg = 0, bb = 0, count = 0;
+        int step = Math.max(1, Math.min(w, h) / 120);
+        for (int y = y0; y <= y1; y += step) {
+            for (int x = x0; x <= x1; x += step) {
+                int color = bitmap.getPixel(x, y);
+                rr += Color.red(color);
+                gg += Color.green(color);
+                bb += Color.blue(color);
+                count++;
+            }
+        }
+        if (count == 0) return Color.rgb(180, 150, 140);
+        return Color.rgb((int)(rr/count), (int)(gg/count), (int)(bb/count));
+    }
+
+    private String colorHex(int color) {
+        return String.format("#%02X%02X%02X",
+                Color.red(color), Color.green(color), Color.blue(color));
+    }
+
+    private void sendRiggedAvatarResult(
+            Bitmap full,
+            Bitmap front,
+            Pose pose,
+            SegmentationMask mask,
+            FaceMesh frontMesh,
+            FaceMesh leftMesh,
+            FaceMesh rightMesh) {
         try {
             Bitmap cutout = applySegmentation(full, mask);
 
@@ -347,13 +451,24 @@ public class MainActivity extends Activity {
             out.put("height", full.getHeight());
             out.put("personTexture", bitmapToDataUrl(cutout));
             out.put("pose", poseToJson(pose, full.getWidth(), full.getHeight()));
-            out.put("face", faceToJson(mesh, face.getWidth(), face.getHeight()));
-            out.put("faceTriangles", faceTrianglesToJson(mesh));
-            out.put("faceDetailed", mesh != null);
 
-            final String js = "window.onFullAvatarBuilt(" + out.toString() + ")";
+            out.put("frontFace", faceToJson(frontMesh, front.getWidth(), front.getHeight()));
+            out.put("frontTriangles", faceTrianglesToJson(frontMesh));
+            out.put("leftFace", leftMesh == null
+                    ? new JSONArray()
+                    : faceToJson(leftMesh, 512, 512));
+            out.put("rightFace", rightMesh == null
+                    ? new JSONArray()
+                    : faceToJson(rightMesh, 512, 512));
+
+            out.put("hasLeftProfile", leftMesh != null);
+            out.put("hasRightProfile", rightMesh != null);
+
+            out.put("skinColor", colorHex(sampleAverageColor(front, .5f, .58f, .12f)));
+            out.put("hairColor", colorHex(sampleAverageColor(front, .5f, .16f, .15f)));
+
+            final String js = "window.onRiggedAvatarBuilt(" + out.toString() + ")";
             runOnUiThread(() -> webView.evaluateJavascript(js, null));
-
             cutout.recycle();
         } catch (Exception e) {
             jsAvatarError("Avatar assembly failed: " + e.getMessage());
@@ -476,8 +591,12 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
-        public void buildFullAvatar(String fullDataUrl, String faceDataUrl) {
-            buildFullAvatar(fullDataUrl, faceDataUrl);
+        public void buildRiggedAvatar(
+                String fullDataUrl,
+                String frontDataUrl,
+                String leftDataUrl,
+                String rightDataUrl) {
+            buildRiggedAvatar(fullDataUrl, frontDataUrl, leftDataUrl, rightDataUrl);
         }
     }
 
@@ -494,10 +613,10 @@ public class MainActivity extends Activity {
             try { faceMeshDetector.close(); } catch (Throwable ignored) {}
         }
         if (poseDetector != null) {
-            try { poseDetector.close(); } catch (Exception ignored) {}
+            try { poseDetector.close(); } catch (Throwable ignored) {}
         }
         if (segmenter != null) {
-            try { segmenter.close(); } catch (Exception ignored) {}
+            try { segmenter.close(); } catch (Throwable ignored) {}
         }
         if (tts != null) {
             tts.stop();
