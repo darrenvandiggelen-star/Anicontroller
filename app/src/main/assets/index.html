@@ -3,84 +3,126 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-<title>Offline 3D Companion</title>
+<title>Neon Companion Creator</title>
 <style>
 :root{
- --bg:#07050a;--panel:rgba(20,14,28,.86);--line:rgba(255,255,255,.10);
- --pink:#ff4fb4;--violet:#7a5cff;--cyan:#65d9ff;--text:#faf7ff;--muted:#aaa1b7
+  --bg:#07050a;--panel:#15101c;--panel2:#20152a;--line:rgba(255,255,255,.10);
+  --text:#fbf8ff;--muted:#aaa0b6;--pink:#ff4fb4;--violet:#795eff;--cyan:#6ddfff;--ok:#5fe39a
 }
-*{box-sizing:border-box}html,body{margin:0;height:100%;overflow:hidden;color:var(--text);font-family:Inter,system-ui,-apple-system,sans-serif;background:#07050a}
+*{box-sizing:border-box}html,body{margin:0;height:100%;overflow:hidden;background:#07050a;color:var(--text);font-family:Inter,system-ui,-apple-system,sans-serif}
 button,input{font:inherit}button{border:0;color:white}
 #app{height:100%;display:grid;grid-template-rows:auto 1fr;background:
- radial-gradient(ellipse at 50% 26%,rgba(108,44,139,.24),transparent 44%),
- radial-gradient(ellipse at 80% 75%,rgba(78,59,255,.12),transparent 38%),
- #08060c}
-header{height:58px;padding:max(8px,env(safe-area-inset-top)) 13px 8px;display:flex;align-items:center;justify-content:space-between;background:rgba(7,5,10,.72);border-bottom:1px solid rgba(255,255,255,.06);backdrop-filter:blur(18px);z-index:20}
-.brand{display:flex;align-items:center;gap:9px;font-size:13px;letter-spacing:.01em}.brand .orb{width:11px;height:11px;border-radius:50%;background:linear-gradient(135deg,#ff65c3,#775dff);box-shadow:0 0 18px #c54fff}.offline{font-size:10px;color:#63e3a0;border:1px solid rgba(99,227,160,.35);border-radius:999px;padding:3px 6px;margin-left:3px}
-.tabs{display:flex;padding:3px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.07);border-radius:14px}.tabs button{font-size:12px;padding:7px 11px;border-radius:11px;background:transparent;color:#bbb1c7}.tabs .active{color:#fff;background:linear-gradient(135deg,rgba(255,79,180,.28),rgba(122,92,255,.38));box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
-main{min-height:0}.page{height:100%;display:none}.page.active{display:block}
+ radial-gradient(circle at 50% 7%,rgba(152,58,199,.16),transparent 34%),
+ radial-gradient(circle at 90% 65%,rgba(80,65,255,.10),transparent 32%),#08060c}
+header{height:58px;padding:max(8px,env(safe-area-inset-top)) 12px 8px;display:flex;align-items:center;justify-content:space-between;background:rgba(7,5,10,.80);backdrop-filter:blur(18px);border-bottom:1px solid rgba(255,255,255,.06);z-index:20}
+.brand{display:flex;align-items:center;gap:8px;font-size:12px;letter-spacing:.05em}.orb{width:11px;height:11px;border-radius:50%;background:linear-gradient(135deg,#ff59bd,#715fff);box-shadow:0 0 17px #bd55ff}.offline{padding:3px 6px;border-radius:999px;border:1px solid rgba(95,227,154,.35);font-size:9px;color:#78e9ac}
+.tabs{display:flex;padding:3px;border:1px solid rgba(255,255,255,.07);background:rgba(255,255,255,.035);border-radius:14px}.tabs button{background:transparent;color:#aea5b9;font-size:12px;padding:7px 10px;border-radius:11px}.tabs .active{color:white;background:linear-gradient(135deg,rgba(255,79,180,.26),rgba(121,94,255,.38))}
+main{min-height:0}.page{display:none;height:100%}.page.active{display:block}
 
-#chat{position:relative;overflow:hidden}
-.stageGlow{position:absolute;left:8%;right:8%;top:5%;height:68%;background:radial-gradient(ellipse at center,rgba(216,73,255,.17),rgba(93,67,255,.055) 45%,transparent 72%);filter:blur(4px);pointer-events:none}
-.ring{position:absolute;left:50%;bottom:101px;width:min(74vw,410px);height:75px;transform:translateX(-50%);border-radius:50%;background:radial-gradient(ellipse,rgba(255,76,190,.24),rgba(122,92,255,.10) 42%,transparent 70%);filter:blur(3px);pointer-events:none}
-.ring:after{content:"";position:absolute;left:13%;right:13%;top:40%;height:1px;background:linear-gradient(90deg,transparent,#b872ff,transparent);box-shadow:0 0 16px #b872ff}
-#gl{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
-.shade{position:absolute;inset:0;pointer-events:none;background:linear-gradient(to bottom,rgba(0,0,0,.08),transparent 42%,rgba(5,3,8,.12) 62%,rgba(5,3,8,.94) 100%)}
-.charInfo{position:absolute;left:12px;top:12px;display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:14px;border:1px solid var(--line);background:rgba(10,7,14,.45);backdrop-filter:blur(12px);font-size:11px;color:#d7cce1}
-.charInfo .live{width:7px;height:7px;border-radius:50%;background:#63e39c;box-shadow:0 0 10px #63e39c}
-.stageHint{position:absolute;right:12px;top:12px;padding:8px 10px;border-radius:14px;border:1px solid var(--line);background:rgba(10,7,14,.45);backdrop-filter:blur(12px);font-size:11px;color:#a99eb5}
-.log{position:absolute;left:10px;right:10px;bottom:78px;max-height:31%;display:flex;flex-direction:column;gap:7px;overflow:auto;scrollbar-width:none;mask-image:linear-gradient(to bottom,transparent 0,#000 18%,#000 100%)}
-.msg{max-width:83%;padding:10px 12px;border-radius:17px;font-size:13px;line-height:1.36;backdrop-filter:blur(15px);box-shadow:0 6px 20px rgba(0,0,0,.18)}
-.ai{align-self:flex-start;background:rgba(22,15,30,.77);border:1px solid rgba(255,255,255,.075)}
-.me{align-self:flex-end;background:linear-gradient(135deg,rgba(150,63,205,.92),rgba(226,61,157,.92));border:1px solid rgba(255,255,255,.10)}
+/* Companion */
+#companion{position:relative;overflow:hidden}
+#scene{position:absolute;inset:0;width:100%;height:100%;touch-action:none;outline:none}
+.stageShade{position:absolute;inset:0;pointer-events:none;background:linear-gradient(to bottom,rgba(0,0,0,.05),transparent 45%,rgba(4,2,7,.1) 63%,rgba(4,2,7,.95) 100%)}
+.statusChip{position:absolute;top:12px;left:12px;padding:8px 10px;border-radius:13px;background:rgba(10,7,15,.52);border:1px solid var(--line);backdrop-filter:blur(12px);font-size:11px;color:#d4c9df;display:flex;gap:7px;align-items:center}
+.statusDot{width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 10px var(--ok)}
+.rigActions{position:absolute;right:10px;top:10px;display:flex;gap:6px}.rigActions button{padding:8px 9px;border-radius:12px;background:rgba(11,8,16,.56);border:1px solid var(--line);font-size:11px;backdrop-filter:blur(12px)}
+.log{position:absolute;left:10px;right:10px;bottom:79px;max-height:31%;overflow:auto;display:flex;flex-direction:column;gap:7px;scrollbar-width:none;mask-image:linear-gradient(to bottom,transparent,#000 20%,#000)}
+.msg{max-width:84%;padding:10px 12px;border-radius:17px;font-size:13px;line-height:1.35;backdrop-filter:blur(15px);box-shadow:0 8px 22px rgba(0,0,0,.18)}.ai{align-self:flex-start;background:rgba(22,15,30,.80);border:1px solid rgba(255,255,255,.075)}.me{align-self:flex-end;background:linear-gradient(135deg,rgba(141,62,203,.94),rgba(225,61,158,.94));border:1px solid rgba(255,255,255,.10)}
 .composer{position:absolute;left:9px;right:9px;bottom:max(8px,env(safe-area-inset-bottom));display:grid;grid-template-columns:1fr 52px 52px;gap:7px;z-index:10}
-.composer input{height:52px;border-radius:18px;border:1px solid rgba(255,255,255,.12);background:rgba(10,7,14,.88);backdrop-filter:blur(18px);color:#fff;padding:0 14px;outline:none;box-shadow:0 10px 30px rgba(0,0,0,.24)}
-.composer input:focus{border-color:rgba(255,79,180,.46)}.icon{height:52px;width:52px;border-radius:18px;font-size:20px;background:rgba(19,13,26,.92);border:1px solid rgba(255,255,255,.10)}
-.send{background:linear-gradient(135deg,#ff4fb4,#725eff);box-shadow:0 8px 24px rgba(183,64,209,.22)}
-.listen{background:#e43c76!important;animation:pulse .85s infinite}@keyframes pulse{50%{box-shadow:0 0 0 9px rgba(228,60,118,.18)}}
+.composer input{height:52px;border-radius:18px;border:1px solid rgba(255,255,255,.12);background:rgba(9,6,14,.90);color:white;padding:0 14px;outline:none;backdrop-filter:blur(18px)}.icon{width:52px;height:52px;border-radius:18px;background:rgba(20,14,28,.94);border:1px solid rgba(255,255,255,.10);font-size:19px}.send{background:linear-gradient(135deg,#ff4fb4,#725eff)}.listen{background:#e63a75!important;animation:pulse .85s infinite}@keyframes pulse{50%{box-shadow:0 0 0 9px rgba(230,58,117,.18)}}
 
-#avatar{overflow:auto;padding:12px;padding-bottom:calc(20px + env(safe-area-inset-bottom));background:
- radial-gradient(circle at 12% 5%,rgba(255,79,180,.09),transparent 30%),
- radial-gradient(circle at 90% 35%,rgba(122,92,255,.10),transparent 34%)}
-.builder{max-width:760px;margin:auto;display:grid;gap:11px}
-.hero{padding:17px;border-radius:23px;background:linear-gradient(145deg,rgba(48,27,61,.93),rgba(19,14,27,.93));border:1px solid rgba(255,255,255,.09);box-shadow:0 18px 45px rgba(0,0,0,.24)}
-.eyebrow{font-size:10px;letter-spacing:.16em;color:#e288ff;font-weight:800}.hero h2{font-size:21px;margin:6px 0 6px}.hero p{font-size:13px;color:#afa4b9;line-height:1.5;margin:0}
-.card{padding:14px;border-radius:20px;background:linear-gradient(180deg,rgba(28,19,38,.94),rgba(16,11,22,.96));border:1px solid rgba(255,255,255,.08);box-shadow:0 12px 32px rgba(0,0,0,.16)}
-.card h3{font-size:15px;margin:0 0 6px}.muted{font-size:12.5px;line-height:1.45;color:var(--muted)}
-.filebtn{display:inline-flex;position:relative;overflow:hidden;margin-top:10px;padding:11px 14px;border-radius:14px;background:linear-gradient(135deg,#f34eae,#765fff);font-weight:750}.filebtn input{position:absolute;inset:0;opacity:0}
-#photo{width:100%;height:auto;display:block;border-radius:16px;background:#09070c;touch-action:none;border:1px solid rgba(255,255,255,.06)}
-.rangeRow{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;margin-top:9px}input[type=range]{width:100%;accent-color:#ff4fb4}.tiny{font-size:11px;color:#beb2ca}
-.previewRow{display:flex;align-items:center;gap:11px}#preview{width:86px;height:86px;border-radius:23px;object-fit:cover;background:#09070c;border:1px solid rgba(255,255,255,.10);box-shadow:0 8px 24px rgba(0,0,0,.22)}
-.buildbtn{width:100%;margin-top:9px;padding:12px;border-radius:15px;background:linear-gradient(135deg,#ff50b6,#735dff);font-weight:800}.buildbtn:disabled{opacity:.5}
-#buildState{margin-top:9px;font-size:11px;color:#d4c6df;min-height:15px}.spinner{display:inline-block;width:12px;height:12px;border:2px solid #614972;border-top-color:#ff4fb4;border-radius:50%;vertical-align:-2px;margin-right:6px;animation:spin .65s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
-.pills{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}.pill{font-size:10px;border-radius:999px;padding:5px 8px;background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.07);color:#c5b9cf}
-@media(min-width:780px){.builder{grid-template-columns:1fr 1fr}.hero{grid-column:1/-1}}
+/* Creator */
+#create{overflow:auto;padding:12px;padding-bottom:calc(24px + env(safe-area-inset-bottom));background:
+ radial-gradient(circle at 10% 0,rgba(255,79,180,.08),transparent 30%),
+ radial-gradient(circle at 92% 36%,rgba(121,94,255,.10),transparent 35%)}
+.creator{max-width:780px;margin:auto;display:grid;gap:11px}.hero{padding:17px;border-radius:23px;background:linear-gradient(145deg,rgba(48,26,61,.95),rgba(18,13,26,.95));border:1px solid rgba(255,255,255,.09);box-shadow:0 18px 45px rgba(0,0,0,.25)}.eyebrow{font-size:10px;font-weight:800;letter-spacing:.16em;color:#e28cff}.hero h2{margin:6px 0;font-size:21px}.hero p{margin:0;color:#b2a7bd;font-size:12.5px;line-height:1.5}
+.modeRow{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}.mode{padding:10px;border-radius:14px;background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.07);font-size:11px;color:#bcb0c8}.mode b{display:block;color:white;margin-bottom:3px}
+.card{padding:14px;border-radius:20px;background:linear-gradient(180deg,rgba(28,19,38,.95),rgba(15,11,21,.97));border:1px solid rgba(255,255,255,.08);box-shadow:0 12px 34px rgba(0,0,0,.16)}.card h3{font-size:14px;margin:0 0 6px}.muted{font-size:12px;line-height:1.45;color:var(--muted)}
+.slots{display:grid;grid-template-columns:1fr 1fr;gap:9px}.slot{min-height:116px;border-radius:17px;border:1px dashed rgba(255,255,255,.14);background:rgba(255,255,255,.025);padding:9px;position:relative;overflow:hidden}.slot.required{border-color:rgba(255,79,180,.28)}.slotTitle{font-size:11px;font-weight:800}.slotHint{font-size:10px;color:#978ba3;margin-top:3px}.thumb{width:64px;height:64px;border-radius:14px;object-fit:cover;background:#08060b;border:1px solid rgba(255,255,255,.07);margin-top:8px}.pick{position:absolute;right:8px;bottom:8px;padding:7px 9px;border-radius:11px;background:linear-gradient(135deg,#e946a7,#735fff);font-size:10px;font-weight:800}.pick input{position:absolute;inset:0;opacity:0}
+.cropWrap{display:none}.cropWrap.active{display:block}#cropCanvas{width:100%;height:auto;border-radius:16px;background:#08060b;touch-action:none;border:1px solid rgba(255,255,255,.07)}.rangeRow{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;margin-top:8px}input[type=range]{width:100%;accent-color:#ff4fb4}
+.baseRow{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.baseOption{padding:9px 10px;border-radius:13px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.035);font-size:11px}.baseOption.active{border-color:rgba(255,79,180,.42);background:rgba(255,79,180,.09)}
+.build{width:100%;padding:13px;border-radius:15px;background:linear-gradient(135deg,#ff50b6,#725eff);font-weight:850;letter-spacing:.03em}.build:disabled{opacity:.5}
+#buildState{min-height:16px;margin-top:9px;font-size:11px;color:#d8c9e3}.spinner{display:inline-block;width:12px;height:12px;border:2px solid #624a73;border-top-color:#ff4fb4;border-radius:50%;vertical-align:-2px;margin-right:6px;animation:spin .7s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}.qualityPills{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}.pill{font-size:9.5px;border-radius:999px;padding:5px 8px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);color:#c6bacf}
+@media(min-width:760px){.creator{grid-template-columns:1fr 1fr}.hero,.wide{grid-column:1/-1}}
 </style>
+<script src="babylon.js"></script>
+<script src="babylonjs.loaders.min.js"></script>
 </head>
 <body>
 <div id="app">
 <header>
- <div class="brand"><span class="orb"></span><b>NEON COMPANION</b><span class="offline">OFFLINE</span></div>
- <div class="tabs"><button id="chatTab" class="active" onclick="basicNav('chat')">Companion</button><button id="avatarTab" onclick="basicNav('avatar')">Create</button></div>
+  <div class="brand"><span class="orb"></span><b>NEON COMPANION</b><span class="offline">OFFLINE</span></div>
+  <div class="tabs"><button id="tabCompanion" class="active" onclick="basicNav('companion')">Companion</button><button id="tabCreate" onclick="basicNav('create')">Create</button></div>
 </header>
 <main>
-<section id="chat" class="page active">
- <div class="stageGlow"></div><div class="ring"></div>
- <canvas id="gl"></canvas><div class="shade"></div>
- <div class="charInfo"><span class="live"></span><span id="charStatus">Waiting for avatar</span></div>
- <div class="stageHint">drag character gently</div>
- <div id="log" class="log"><div class="msg ai">Create me from a photo. A full-body or knees-up photo gives the strongest animated result.</div></div>
- <div class="composer"><input id="input" placeholder="Message your companion…" autocomplete="off"><button id="mic" class="icon">🎙</button><button id="send" class="icon send">➤</button></div>
+<section id="companion" class="page active">
+  <canvas id="scene"></canvas>
+  <div class="stageShade"></div>
+  <div class="statusChip"><span class="statusDot"></span><span id="statusText">Create your rigged avatar</span></div>
+  <div class="rigActions"><button id="flipRig">Flip</button><button id="resetView">View</button></div>
+  <div id="log" class="log"><div class="msg ai">Create a person from the Creator tab. Front + full body is enough for Quick Build; add left and right face references for Pro Build.</div></div>
+  <div class="composer"><input id="chatInput" placeholder="Message your companion…" autocomplete="off"><button id="mic" class="icon">🎙</button><button id="send" class="icon send">➤</button></div>
 </section>
 
-<section id="avatar" class="page">
- <div class="builder">
-  <div class="hero"><div class="eyebrow">PERSON → AVATAR</div><h2>Create the actual character</h2><p>Upload the person. The app isolates their whole body, detects the skeleton and facial structure, then builds an animated character locally on the phone.</p><div class="pills"><span class="pill">33 body landmarks</span><span class="pill">468 face points</span><span class="pill">person segmentation</span><span class="pill">offline models</span></div></div>
-  <div class="card"><h3>1 · Person photo</h3><div class="muted">Use a clear front-facing full-body photo for best quality. A face-only photo still works, but body detail cannot be recovered from pixels that are not present.</div><label class="filebtn">Choose person<input id="file" type="file" accept="image/*"></label></div>
-  <div class="card"><h3>2 · Face detail</h3><div class="muted">Move the neon frame over the face. This gives the face model a high-resolution identity reference while the complete photo is used for the body.</div></div>
-  <div class="card" style="grid-column:1/-1"><canvas id="photo" width="720" height="720"></canvas><div class="rangeRow"><input id="size" type="range" min="90" max="430" value="210"><span class="tiny">face frame</span></div></div>
-  <div class="card" style="grid-column:1/-1"><h3>3 · Build full animated avatar</h3><div class="previewRow"><img id="preview"><div style="flex:1"><div class="muted">The final character keeps the source person's hair, clothing and silhouette when they are visible in the photo.</div><button id="apply" class="buildbtn">GENERATE FULL CHARACTER</button><div id="buildState"></div></div></div></div>
- </div>
+<section id="create" class="page">
+  <div class="creator">
+    <div class="hero">
+      <div class="eyebrow">CREATOR V0.4</div>
+      <h2>Build a real rigged character</h2>
+      <p>This build uses a real skinned humanoid skeleton. Your photos drive facial geometry, body proportions and appearance instead of turning the photo itself into a flat puppet.</p>
+      <div class="modeRow">
+        <div class="mode"><b>Quick Build</b>Front face + full body.</div>
+        <div class="mode"><b>Pro Build</b>Add left + right face references for better depth.</div>
+      </div>
+    </div>
+
+    <div class="card wide">
+      <h3>1 · Person references</h3>
+      <div class="muted">Use clear photos of the same person. Side references are optional.</div>
+      <div class="slots" style="margin-top:10px">
+        <div class="slot required">
+          <div class="slotTitle">FRONT FACE *</div><div class="slotHint">Straight-on, clear light</div>
+          <img id="thumbFront" class="thumb">
+          <label class="pick">Choose<input id="fileFront" type="file" accept="image/*"></label>
+        </div>
+        <div class="slot required">
+          <div class="slotTitle">FULL BODY *</div><div class="slotHint">Head to feet preferred</div>
+          <img id="thumbBody" class="thumb">
+          <label class="pick">Choose<input id="fileBody" type="file" accept="image/*"></label>
+        </div>
+        <div class="slot">
+          <div class="slotTitle">LEFT PROFILE</div><div class="slotHint">Optional Pro reference</div>
+          <img id="thumbLeft" class="thumb">
+          <label class="pick">Choose<input id="fileLeft" type="file" accept="image/*"></label>
+        </div>
+        <div class="slot">
+          <div class="slotTitle">RIGHT PROFILE</div><div class="slotHint">Optional Pro reference</div>
+          <img id="thumbRight" class="thumb">
+          <label class="pick">Choose<input id="fileRight" type="file" accept="image/*"></label>
+        </div>
+      </div>
+    </div>
+
+    <div id="cropWrap" class="card wide cropWrap">
+      <h3>2 · Select the exact face</h3>
+      <div class="muted">Move the neon square over the person you want. This front crop becomes the identity surface on the rigged head.</div>
+      <canvas id="cropCanvas" width="720" height="720"></canvas>
+      <div class="rangeRow"><input id="cropSize" type="range" min="100" max="430" value="230"><span class="muted">size</span></div>
+    </div>
+
+    <div class="card">
+      <h3>3 · Rig style</h3>
+      <div class="muted">The rig provides real bones and joints. The person data reshapes/tints it and the reconstructed face sits on the animated head.</div>
+      <div class="baseRow" style="margin-top:9px"><button id="baseDefault" class="baseOption active">Rigged humanoid</button></div>
+    </div>
+
+    <div class="card">
+      <h3>4 · Build</h3>
+      <div class="qualityPills"><span class="pill">real skeleton</span><span class="pill">468-point face</span><span class="pill">33-point body</span><span class="pill">profile depth</span><span class="pill">offline renderer</span></div>
+      <button id="buildBtn" class="build" style="margin-top:11px">GENERATE RIGGED AVATAR</button>
+      <div id="buildState"></div>
+    </div>
+  </div>
 </section>
 </main>
 </div>
@@ -88,178 +130,209 @@ main{min-height:0}.page{height:100%;display:none}.page.active{display:block}
 <script>
 window.basicNav=function(name){
   try{
-    var chat=document.getElementById('chat');
-    var avatar=document.getElementById('avatar');
-    var chatTab=document.getElementById('chatTab');
-    var avatarTab=document.getElementById('avatarTab');
-    var isChat=name==='chat';
-    if(chat) chat.classList.toggle('active',isChat);
-    if(avatar) avatar.classList.toggle('active',!isChat);
-    if(chatTab) chatTab.classList.toggle('active',isChat);
-    if(avatarTab) avatarTab.classList.toggle('active',!isChat);
+    var c=name==='companion';
+    document.getElementById('companion').classList.toggle('active',c);
+    document.getElementById('create').classList.toggle('active',!c);
+    document.getElementById('tabCompanion').classList.toggle('active',c);
+    document.getElementById('tabCreate').classList.toggle('active',!c);
+    if(c&&window.avatarResize) setTimeout(window.avatarResize,40);
   }catch(e){}
 };
-window.addEventListener('error',function(e){
-  try{
-    var s=document.getElementById('charStatus');
-    if(s) s.textContent='UI error: '+(e.message||'unknown');
-  }catch(_){}
-});
 </script>
+
 <script>
-(()=>{
-const $=id=>document.getElementById(id);
-const chat=$('chat'),avatar=$('avatar'),chatTab=$('chatTab'),avatarTab=$('avatarTab');
-function setPage(name){const c=name==='chat';chat.classList.toggle('active',c);avatar.classList.toggle('active',!c);chatTab.classList.toggle('active',c);avatarTab.classList.toggle('active',!c);setTimeout(resize,30)}
-chatTab.onclick=()=>setPage('chat');avatarTab.onclick=()=>setPage('avatar');
+(function(){
+const $=function(id){return document.getElementById(id)};
+const statusText=$('statusText'),buildState=$('buildState'),log=$('log'),chatInput=$('chatInput'),mic=$('mic');
+let talking=false,avatarReady=false,currentBuild=null,rigFlipped=false;
 
-/* ---------- Source photo + face selector ---------- */
-const pc=$('photo'),cx=pc.getContext('2d'),file=$('file'),slider=$('size'),preview=$('preview'),buildState=$('buildState');
-let src=new Image(),loaded=false,sel={x:255,y:155,s:210},drag=false,dragOff={x:0,y:0},sourceDataUrl='',faceCanvas=null,faceRect=[.35,.15,.3,.3];
-function fit(){if(!loaded)return null;const ir=src.width/src.height;let w,h,x,y;if(ir>1){w=720;h=720/ir;x=0;y=(720-h)/2}else{h=720;w=720*ir;y=0;x=(720-w)/2}return{w,h,x,y}}
-function clampSel(){sel.s=Math.max(70,Math.min(sel.s,500));sel.x=Math.max(0,Math.min(sel.x,720-sel.s));sel.y=Math.max(0,Math.min(sel.y,720-sel.s))}
-function canvasPos(e){const r=pc.getBoundingClientRect();return{x:(e.clientX-r.left)*720/r.width,y:(e.clientY-r.top)*720/r.height}}
-function cropFace(){
- if(!loaded)return null;const f=fit();
- const nx=(sel.x-f.x)/f.w,ny=(sel.y-f.y)/f.h,nw=sel.s/f.w,nh=sel.s/f.h;
- faceRect=[nx,ny,nw,nh].map((v,i)=>i<2?Math.max(0,Math.min(1,v)):Math.max(.01,Math.min(1,v)));
- const sx=nx*src.width,sy=ny*src.height,ss=nw*src.width;
- const c=document.createElement('canvas');c.width=c.height=512;const k=c.getContext('2d');
- k.fillStyle='#161019';k.fillRect(0,0,512,512);k.drawImage(src,sx,sy,ss,ss,0,0,512,512);return c
+/* ---------------- photos ---------------- */
+const photos={front:null,body:null,left:null,right:null};
+const thumbs={front:$('thumbFront'),body:$('thumbBody'),left:$('thumbLeft'),right:$('thumbRight')};
+function readFile(input,key){
+  const file=input.files&&input.files[0];if(!file)return;
+  const r=new FileReader();
+  r.onload=function(e){
+    photos[key]=e.target.result;thumbs[key].src=e.target.result;
+    if(key==='front') loadCropSource(e.target.result);
+  };
+  r.readAsDataURL(file);
 }
-function normalizedFull(){
- const max=1024,scale=Math.min(1,max/Math.max(src.width,src.height)),c=document.createElement('canvas');
- c.width=Math.max(1,Math.round(src.width*scale));c.height=Math.max(1,Math.round(src.height*scale));
- c.getContext('2d').drawImage(src,0,0,c.width,c.height);return c.toDataURL('image/jpeg',.92)
-}
-function drawPhoto(){
- cx.clearRect(0,0,720,720);cx.fillStyle='#09070c';cx.fillRect(0,0,720,720);
- if(!loaded){cx.fillStyle='#887c92';cx.textAlign='center';cx.font='24px system-ui';cx.fillText('Choose a person photo',360,350);cx.font='13px system-ui';cx.fillStyle='#6d6277';cx.fillText('full body recommended',360,378);return}
- const f=fit();cx.drawImage(src,f.x,f.y,f.w,f.h);cx.fillStyle='rgba(5,3,8,.48)';cx.fillRect(0,0,720,720);
- cx.save();cx.beginPath();cx.rect(sel.x,sel.y,sel.s,sel.s);cx.clip();cx.drawImage(src,f.x,f.y,f.w,f.h);cx.restore();
- cx.strokeStyle='#ff5abd';cx.lineWidth=5;cx.shadowBlur=18;cx.shadowColor='#c454ff';cx.strokeRect(sel.x,sel.y,sel.s,sel.s);cx.shadowBlur=0;
- [[sel.x,sel.y],[sel.x+sel.s,sel.y],[sel.x,sel.y+sel.s],[sel.x+sel.s,sel.y+sel.s]].forEach(([x,y])=>{cx.beginPath();cx.fillStyle='#fff';cx.arc(x,y,6,0,Math.PI*2);cx.fill()});
- faceCanvas=cropFace();if(faceCanvas)preview.src=faceCanvas.toDataURL('image/jpeg',.92)
-}
-pc.onpointerdown=e=>{const p=canvasPos(e);if(p.x>=sel.x&&p.x<=sel.x+sel.s&&p.y>=sel.y&&p.y<=sel.y+sel.s){drag=true;dragOff={x:p.x-sel.x,y:p.y-sel.y};pc.setPointerCapture(e.pointerId)}};
-pc.onpointermove=e=>{if(!drag)return;const p=canvasPos(e);sel.x=p.x-dragOff.x;sel.y=p.y-dragOff.y;clampSel();drawPhoto()};pc.onpointerup=()=>drag=false;
-slider.oninput=()=>{const m={x:sel.x+sel.s/2,y:sel.y+sel.s/2};sel.s=+slider.value;sel.x=m.x-sel.s/2;sel.y=m.y-sel.s/2;clampSel();drawPhoto()};
-file.onchange=e=>{const f=e.target.files&&e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>{sourceDataUrl=ev.target.result;src.onload=()=>{loaded=true;const s=Math.min(230,Math.max(130,720*.25));sel={x:360-s/2,y:160,s};slider.value=s;buildState.textContent='';drawPhoto()};src.src=sourceDataUrl};r.readAsDataURL(f)};
-drawPhoto();
+$('fileFront').onchange=function(){readFile(this,'front')};
+$('fileBody').onchange=function(){readFile(this,'body')};
+$('fileLeft').onchange=function(){readFile(this,'left')};
+$('fileRight').onchange=function(){readFile(this,'right')};
 
-/* ---------- Chat ---------- */
-const log=$('log'),input=$('input'),mic=$('mic'),charStatus=$('charStatus');let talking=false,avatarReady=false;
-function msg(w,t){const d=document.createElement('div');d.className='msg '+w;d.textContent=t;log.appendChild(d);log.scrollTop=log.scrollHeight}
-function localReply(t){const q=t.toLowerCase();if(q.includes('hello')||q==='hi')return "Hey. I'm here.";if(q.includes('avatar')||q.includes('body'))return avatarReady?"This character is rigged from the person you uploaded.":"Open Create and build the character from a person photo.";if(q.includes('offline'))return "The body, segmentation and face models are bundled inside this app.";return ["Tell me more.","I'm following. What should we do next?","Got it.","Okay. Keep going."][[...t].reduce((n,c)=>n+c.charCodeAt(0),0)%4]}
-function speak(t){try{if(window.AndroidBridge&&AndroidBridge.speak){talking=true;AndroidBridge.speak(t);setTimeout(()=>{if(talking)talking=false},Math.max(2500,t.length*85))}}catch(e){}}
-function send(){const t=input.value.trim();if(!t)return;input.value='';msg('me',t);setTimeout(()=>{const r=localReply(t);msg('ai',r);speak(r)},140)}
-$('send').onclick=send;input.onkeydown=e=>{if(e.key==='Enter')send()};
-mic.onclick=()=>{try{mic.classList.add('listen');AndroidBridge.startVoice()}catch(e){mic.classList.remove('listen');msg('ai','Voice input is unavailable.')}}
-window.onNativeSpeechResult=t=>{mic.classList.remove('listen');input.value=t||'';if(input.value.trim())send()};
-window.onNativeSpeechError=t=>{mic.classList.remove('listen');msg('ai',t||'Voice recognition unavailable.')};
-window.onNativeTalking=v=>{talking=!!v};
+const cropCanvas=$('cropCanvas'),cropCtx=cropCanvas.getContext('2d'),cropSize=$('cropSize'),cropWrap=$('cropWrap');
+let cropImg=new Image(),cropLoaded=false,crop={x:245,y:170,s:230},cropDrag=false,cropOff={x:0,y:0};
+function fitCrop(){
+  const ir=cropImg.width/cropImg.height;let w,h,x,y;
+  if(ir>1){w=720;h=720/ir;x=0;y=(720-h)/2}else{h=720;w=720*ir;y=0;x=(720-w)/2}
+  return{w:w,h:h,x:x,y:y};
+}
+function clampCrop(){crop.s=Math.max(80,Math.min(crop.s,500));crop.x=Math.max(0,Math.min(crop.x,720-crop.s));crop.y=Math.max(0,Math.min(crop.y,720-crop.s))}
+function drawCrop(){
+  cropCtx.clearRect(0,0,720,720);cropCtx.fillStyle='#08060b';cropCtx.fillRect(0,0,720,720);if(!cropLoaded)return;
+  const f=fitCrop();cropCtx.drawImage(cropImg,f.x,f.y,f.w,f.h);cropCtx.fillStyle='rgba(5,3,8,.48)';cropCtx.fillRect(0,0,720,720);
+  cropCtx.save();cropCtx.beginPath();cropCtx.rect(crop.x,crop.y,crop.s,crop.s);cropCtx.clip();cropCtx.drawImage(cropImg,f.x,f.y,f.w,f.h);cropCtx.restore();
+  cropCtx.shadowBlur=20;cropCtx.shadowColor='#cf58ff';cropCtx.strokeStyle='#ff58bc';cropCtx.lineWidth=5;cropCtx.strokeRect(crop.x,crop.y,crop.s,crop.s);cropCtx.shadowBlur=0;
+}
+function loadCropSource(url){cropImg.onload=function(){cropLoaded=true;crop={x:245,y:160,s:230};cropSize.value=230;cropWrap.classList.add('active');drawCrop()};cropImg.src=url}
+function cropPos(e){const r=cropCanvas.getBoundingClientRect();return{x:(e.clientX-r.left)*720/r.width,y:(e.clientY-r.top)*720/r.height}}
+cropCanvas.onpointerdown=function(e){const p=cropPos(e);if(p.x>=crop.x&&p.x<=crop.x+crop.s&&p.y>=crop.y&&p.y<=crop.y+crop.s){cropDrag=true;cropOff={x:p.x-crop.x,y:p.y-crop.y};cropCanvas.setPointerCapture(e.pointerId)}};
+cropCanvas.onpointermove=function(e){if(!cropDrag)return;const p=cropPos(e);crop.x=p.x-cropOff.x;crop.y=p.y-cropOff.y;clampCrop();drawCrop()};
+cropCanvas.onpointerup=function(){cropDrag=false};
+cropSize.oninput=function(){const mx=crop.x+crop.s/2,my=crop.y+crop.s/2;crop.s=+cropSize.value;crop.x=mx-crop.s/2;crop.y=my-crop.s/2;clampCrop();drawCrop()};
+function croppedFront(){
+  if(!cropLoaded)return null;const f=fitCrop(),sx=(crop.x-f.x)/f.w*cropImg.width,sy=(crop.y-f.y)/f.h*cropImg.height,ss=crop.s/f.w*cropImg.width;
+  const c=document.createElement('canvas');c.width=c.height=512;const k=c.getContext('2d');k.fillStyle='#17111b';k.fillRect(0,0,512,512);k.drawImage(cropImg,sx,sy,ss,ss,0,0,512,512);return c.toDataURL('image/jpeg',.94)
+}
+function normalized(url,maxDim){
+  return new Promise(function(resolve){
+    if(!url){resolve('');return}
+    const im=new Image();im.onload=function(){const s=Math.min(1,maxDim/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=Math.max(1,Math.round(im.width*s));c.height=Math.max(1,Math.round(im.height*s));c.getContext('2d').drawImage(im,0,0,c.width,c.height);resolve(c.toDataURL('image/jpeg',.92))};im.onerror=function(){resolve('')};im.src=url;
+  })
+}
 
-/* ---------- Full body + detailed face WebGL character ---------- */
-const gc=$('gl'),gl=gc.getContext('webgl',{alpha:true,antialias:true,premultipliedAlpha:true});
-let program=null,pBuf=null,uBuf=null,iBuf=null,texture=null,indexCount=0,baseVerts=[],regions=[],pose={},texW=1,texH=1,rotY=0,rotX=0,drag3=false,lastX=0,lastY=0;
-let fpBuf=null,fuBuf=null,fiBuf=null,fTexture=null,faceIndexCount=0,faceBase=[],faceMeta=[],faceMap={},faceReady=false;
-const VS='attribute vec3 p;attribute vec2 u;uniform mat4 m;varying vec2 v;void main(){v=u;gl_Position=m*vec4(p,1.0);}';
-const FS='precision mediump float;varying vec2 v;uniform sampler2D tex;void main(){vec4 c=texture2D(tex,v);if(c.a<.025)discard;float side=.90+.14*(1.0-v.x);float top=.95+.06*(1.0-v.y);c.rgb*=side*top;c.rgb+=vec3(.028,.005,.045)*c.a;gl_FragColor=c;}';
-function shader(type,src){const s=gl.createShader(type);gl.shaderSource(s,src);gl.compileShader(s);return s}
-if(gl){
- program=gl.createProgram();gl.attachShader(program,shader(gl.VERTEX_SHADER,VS));gl.attachShader(program,shader(gl.FRAGMENT_SHADER,FS));gl.linkProgram(program);gl.useProgram(program);
- pBuf=gl.createBuffer();uBuf=gl.createBuffer();iBuf=gl.createBuffer();fpBuf=gl.createBuffer();fuBuf=gl.createBuffer();fiBuf=gl.createBuffer();
- texture=gl.createTexture();fTexture=gl.createTexture();
- [texture,fTexture].forEach(t=>{gl.bindTexture(gl.TEXTURE_2D,t);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,1,1,0,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array([0,0,0,0]));gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE)})
-}
-function upload(buffer,data,dynamic=false){gl.bindBuffer(gl.ARRAY_BUFFER,buffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(data),dynamic?gl.DYNAMIC_DRAW:gl.STATIC_DRAW)}
-function attrs(pb,ub){const pl=gl.getAttribLocation(program,'p'),ul=gl.getAttribLocation(program,'u');gl.bindBuffer(gl.ARRAY_BUFFER,pb);gl.enableVertexAttribArray(pl);gl.vertexAttribPointer(pl,3,gl.FLOAT,false,0,0);gl.bindBuffer(gl.ARRAY_BUFFER,ub);gl.enableVertexAttribArray(ul);gl.vertexAttribPointer(ul,2,gl.FLOAT,false,0,0)}
-function P(type,fallback){return pose[type]||fallback}
-function mapP(p,aspect){return{x:(p.x-.5)*2.24*aspect,y:(.5-p.y)*2.24,z:0}}
-function dseg(p,a,b){const vx=b.x-a.x,vy=b.y-a.y,wx=p.x-a.x,wy=p.y-a.y,l=vx*vx+vy*vy||.0001,t=Math.max(0,Math.min(1,(wx*vx+wy*vy)/l)),dx=p.x-(a.x+t*vx),dy=p.y-(a.y+t*vy);return Math.sqrt(dx*dx+dy*dy)}
-function detectRegion(u,v){
- const q={x:u,y:v},ls=P(11,{x:.37,y:.30}),rs=P(12,{x:.63,y:.30}),le=P(13,{x:.29,y:.46}),re=P(14,{x:.71,y:.46}),lw=P(15,{x:.25,y:.61}),rw=P(16,{x:.75,y:.61}),lh=P(23,{x:.43,y:.56}),rh=P(24,{x:.57,y:.56}),lk=P(25,{x:.43,y:.75}),rk=P(26,{x:.57,y:.75}),la=P(27,{x:.43,y:.94}),ra=P(28,{x:.57,y:.94});
- const sw=Math.max(.08,Math.hypot(ls.x-rs.x,ls.y-rs.y)),parts=[['lua',dseg(q,ls,le)],['lla',dseg(q,le,lw)],['rua',dseg(q,rs,re)],['rla',dseg(q,re,rw)],['lul',dseg(q,lh,lk)],['lll',dseg(q,lk,la)],['rul',dseg(q,rh,rk)],['rll',dseg(q,rk,ra)]];
- parts.sort((a,b)=>a[1]-b[1]);if(parts[0][1]<sw*.34)return parts[0][0];
- const fr=faceRect;if(u>fr[0]-.03&&u<fr[0]+fr[2]+.03&&v>fr[1]-.03&&v<fr[1]+fr[3]+.03)return'head';return'torso'
-}
-function buildGrid(data,img){
- pose={};(data.pose||[]).forEach(r=>pose[r[0]]={x:r[1],y:r[2],z:r[3],c:r[4]});texW=data.width;texH=data.height;
- const C=54,R=82,aspect=texW/texH,verts=[],uv=[],idx=[];regions=[];
- for(let y=0;y<=R;y++){const v=y/R;for(let x=0;x<=C;x++){const u=x/C;verts.push((u-.5)*2.24*aspect,(.5-v)*2.24,.035*Math.sin(Math.PI*u)*Math.sin(Math.PI*v));uv.push(u,v);regions.push(detectRegion(u,v))}}
- for(let y=0;y<R;y++)for(let x=0;x<C;x++){const a=y*(C+1)+x,b=a+C+1;idx.push(a,b,a+1,b,b+1,a+1)}
- baseVerts=verts.slice();upload(pBuf,verts,true);upload(uBuf,uv,false);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,iBuf);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint16Array(idx),gl.STATIC_DRAW);indexCount=idx.length;
- gl.bindTexture(gl.TEXTURE_2D,texture);gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,img);avatarReady=true;charStatus.textContent='full-body avatar active'
-}
-function maskedFaceSource(){
- const c=document.createElement('canvas');c.width=c.height=512;const k=c.getContext('2d');k.drawImage(faceCanvas,0,0,512,512);k.globalCompositeOperation='destination-in';
- const g=k.createRadialGradient(256,245,150,256,250,260);g.addColorStop(0,'rgba(0,0,0,1)');g.addColorStop(.74,'rgba(0,0,0,1)');g.addColorStop(1,'rgba(0,0,0,0)');k.fillStyle=g;k.fillRect(0,0,512,512);k.globalCompositeOperation='source-over';return c
-}
-function buildFace(data){
- faceReady=false;faceMap={};const pts=data.face||[],tris=data.faceTriangles||[];if(pts.length<100||tris.length<100||!faceCanvas)return;
- const aspect=texW/texH,max=Math.max(...pts.map(r=>r[0])),verts=new Array((max+1)*3).fill(0),uv=new Array((max+1)*2).fill(0);faceMeta=new Array(max+1);
- pts.forEach(r=>{const i=r[0],fu=r[1],fv=r[2],fz=r[3],U=faceRect[0]+fu*faceRect[2],V=faceRect[1]+fv*faceRect[3];verts[i*3]=(U-.5)*2.24*aspect;verts[i*3+1]=(.5-V)*2.24;verts[i*3+2]=.075-fz*faceRect[2]*1.35;uv[i*2]=fu;uv[i*2+1]=fv;faceMeta[i]={fu,fv,U,V};faceMap[i]=faceMeta[i]});
- const idx=[];tris.forEach(t=>{if(t.length>=3)idx.push(t[0],t[1],t[2])});faceBase=verts.slice();upload(fpBuf,verts,true);upload(fuBuf,uv,false);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,fiBuf);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint16Array(idx),gl.STATIC_DRAW);faceIndexCount=idx.length;
- const masked=maskedFaceSource();gl.bindTexture(gl.TEXTURE_2D,fTexture);gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,masked);faceReady=true
-}
-function rot(p,piv,a){const c=Math.cos(a),s=Math.sin(a),x=p.x-piv.x,y=p.y-piv.y;return{x:piv.x+x*c-y*s,y:piv.y+x*s+y*c,z:p.z}}
-function rigState(t){
- const aspect=texW/texH,hip=mapP({x:(P(23,{x:.43,y:.56}).x+P(24,{x:.57,y:.56}).x)/2,y:(P(23,{x:.43,y:.56}).y+P(24,{x:.57,y:.56}).y)/2},aspect),neck=mapP({x:(P(11,{x:.37,y:.3}).x+P(12,{x:.63,y:.3}).x)/2,y:(P(11,{x:.37,y:.3}).y+P(12,{x:.63,y:.3}).y)/2},aspect);
- const joints={ls:mapP(P(11,{x:.37,y:.30}),aspect),rs:mapP(P(12,{x:.63,y:.30}),aspect),le:mapP(P(13,{x:.29,y:.46}),aspect),re:mapP(P(14,{x:.71,y:.46}),aspect),lh:mapP(P(23,{x:.43,y:.56}),aspect),rh:mapP(P(24,{x:.57,y:.56}),aspect),lk:mapP(P(25,{x:.43,y:.75}),aspect),rk:mapP(P(26,{x:.57,y:.75}),aspect)};
- return{aspect,hip,neck,joints,sway:Math.sin(t*.0007)*.020,breath:1+Math.sin(t*.00145)*.006,voice:talking?1:0,armWave:(talking?1:0)*Math.sin(t*.0065)*.10,idleArm:Math.sin(t*.0011)*.018,headTilt:Math.sin(t*.0009)*.025}
-}
-function applyHeadTransform(p,s){p.y=s.hip.y+(p.y-s.hip.y)*s.breath;p=rot(p,s.hip,s.sway);return rot(p,s.neck,s.headTilt)}
-function animateBody(t,s){
- if(!baseVerts.length)return;const out=new Float32Array(baseVerts.length);
- for(let i=0;i<regions.length;i++){let p={x:baseVerts[i*3],y:baseVerts[i*3+1],z:baseVerts[i*3+2]},r=regions[i];p.y=s.hip.y+(p.y-s.hip.y)*s.breath;p=rot(p,s.hip,s.sway);
-   if(r==='head')p=rot(p,s.neck,s.headTilt);
-   else if(r==='lua')p=rot(p,s.joints.ls,s.idleArm-s.armWave*.5);
-   else if(r==='rua')p=rot(p,s.joints.rs,-s.idleArm+s.armWave);
-   else if(r==='lla'){p=rot(p,s.joints.ls,s.idleArm-s.armWave*.5);p=rot(p,s.joints.le,-.012-s.armWave*.35)}
-   else if(r==='rla'){p=rot(p,s.joints.rs,-s.idleArm+s.armWave);p=rot(p,s.joints.re,.012+s.armWave*.55)}
-   else if(r==='lul')p=rot(p,s.joints.lh,Math.sin(t*.0009)*.009);
-   else if(r==='rul')p=rot(p,s.joints.rh,-Math.sin(t*.0009)*.009);
-   else if(r==='lll'){p=rot(p,s.joints.lh,Math.sin(t*.0009)*.009);p=rot(p,s.joints.lk,-.005)}
-   else if(r==='rll'){p=rot(p,s.joints.rh,-Math.sin(t*.0009)*.009);p=rot(p,s.joints.rk,.005)}
-   out[i*3]=p.x;out[i*3+1]=p.y;out[i*3+2]=p.z+(r==='head'?.018:0)
- }
- gl.bindBuffer(gl.ARRAY_BUFFER,pBuf);gl.bufferSubData(gl.ARRAY_BUFFER,0,out)
-}
-function animateFace(t,s){
- if(!faceReady||!faceBase.length)return;const out=new Float32Array(faceBase.length),mTop=faceMap[13],mBot=faceMap[14],l1=faceMap[159],l2=faceMap[145],r1=faceMap[386],r2=faceMap[374];
- const mouth=mTop&&mBot?{u:(mTop.fu+mBot.fu)/2,v:(mTop.fv+mBot.fv)/2}:{u:.5,v:.68};
- const le=l1&&l2?{u:(l1.fu+l2.fu)/2,v:(l1.fv+l2.fv)/2}:{u:.35,v:.42},re=r1&&r2?{u:(r1.fu+r2.fu)/2,v:(r1.fv+r2.fv)/2}:{u:.65,v:.42};
- const phase=t%4700,blink=Math.max(0,1-Math.abs(phase-2350)/95),mouthOpen=talking?(.45+.55*Math.abs(Math.sin(t*.023))):.03;
- for(let i=0;i<faceMeta.length;i++){const meta=faceMeta[i];if(!meta)continue;let p={x:faceBase[i*3],y:faceBase[i*3+1],z:faceBase[i*3+2]},du=meta.fu-mouth.u,dv=meta.fv-mouth.v,dm=Math.sqrt(du*du+dv*dv);
-   if(dm<.105){const w=1-dm/.105,dir=meta.fv>mouth.v?-1:1;p.y+=dir*mouthOpen*w*.020}
-   [[le.u,le.v],[re.u,re.v]].forEach(e=>{const dx=meta.fu-e[0],dy=meta.fv-e[1],d=Math.sqrt((dx*dx)*1.8+dy*dy);if(d<.065&&blink>0)p.y+=(e[1]-meta.fv)*blink*.82});
-   p=applyHeadTransform(p,s);out[i*3]=p.x;out[i*3+1]=p.y;out[i*3+2]=p.z+.028
- }
- gl.bindBuffer(gl.ARRAY_BUFFER,fpBuf);gl.bufferSubData(gl.ARRAY_BUFFER,0,out)
-}
-function matMul(a,b){const o=new Float32Array(16);for(let r=0;r<4;r++)for(let c=0;c<4;c++)o[c+r*4]=a[r*4]*b[c]+a[r*4+1]*b[c+4]+a[r*4+2]*b[c+8]+a[r*4+3]*b[c+12];return o}
-function persp(f,a,n,z){const q=1/Math.tan(f/2),o=new Float32Array(16);o[0]=q/a;o[5]=q;o[10]=(z+n)/(n-z);o[11]=-1;o[14]=2*z*n/(n-z);return o}
-function ry(a){const c=Math.cos(a),s=Math.sin(a);return new Float32Array([c,0,s,0,0,1,0,0,-s,0,c,0,0,0,0,1])}
-function rx(a){const c=Math.cos(a),s=Math.sin(a);return new Float32Array([1,0,0,0,0,c,-s,0,0,s,c,0,0,0,0,1])}
-function tr(z){return new Float32Array([1,0,0,0,0,1,0,0,0,0,1,0,0,0,z,1])}
-function resize(){if(!gl)return;const r=gc.getBoundingClientRect(),d=Math.min(devicePixelRatio||1,2);gc.width=Math.max(1,Math.floor(r.width*d));gc.height=Math.max(1,Math.floor(r.height*d));gl.viewport(0,0,gc.width,gc.height)}
-addEventListener('resize',resize);resize();gc.onpointerdown=e=>{drag3=true;lastX=e.clientX;lastY=e.clientY;gc.setPointerCapture(e.pointerId)};gc.onpointermove=e=>{if(!drag3)return;rotY=Math.max(-.24,Math.min(.24,rotY+(e.clientX-lastX)*.0025));rotX=Math.max(-.12,Math.min(.12,rotX+(e.clientY-lastY)*.0018));lastX=e.clientX;lastY=e.clientY};gc.onpointerup=()=>drag3=false;
-function frame(t){if(gl){gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.enable(gl.DEPTH_TEST);if(indexCount){const s=rigState(t);animateBody(t,s);animateFace(t,s);let M=matMul(rx(rotX),ry(rotY));M=matMul(M,tr(-3.15));let V=matMul(M,persp(Math.PI/4.25,gc.width/gc.height,.1,100));gl.uniformMatrix4fv(gl.getUniformLocation(program,'m'),false,V);
-   attrs(pBuf,uBuf);gl.bindTexture(gl.TEXTURE_2D,texture);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,iBuf);gl.drawElements(gl.TRIANGLES,indexCount,gl.UNSIGNED_SHORT,0);
-   if(faceReady){attrs(fpBuf,fuBuf);gl.bindTexture(gl.TEXTURE_2D,fTexture);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,fiBuf);gl.drawElements(gl.TRIANGLES,faceIndexCount,gl.UNSIGNED_SHORT,0)}
- }}requestAnimationFrame(frame)}requestAnimationFrame(frame);
+/* ---------------- chat ---------------- */
+function addMsg(who,text){const d=document.createElement('div');d.className='msg '+who;d.textContent=text;log.appendChild(d);log.scrollTop=log.scrollHeight}
+function localReply(t){const q=t.toLowerCase();if(q.includes('hello')||q==='hi')return "Hey. I'm here.";if(q.includes('avatar')||q.includes('body'))return avatarReady?"This is the rigged avatar generated from your reference set.":"Create a person first in the Creator tab.";if(q.includes('offline'))return "The renderer, rig and vision models are bundled into the APK.";return["Tell me more.","Got it. What should we do next?","I'm following.","Okay. Keep going."][[].slice.call(t).reduce(function(n,c){return n+c.charCodeAt(0)},0)%4]}
+function speak(t){try{if(window.AndroidBridge&&AndroidBridge.speak){talking=true;AndroidBridge.speak(t)}}catch(e){}}
+function send(){const t=chatInput.value.trim();if(!t)return;chatInput.value='';addMsg('me',t);setTimeout(function(){const r=localReply(t);addMsg('ai',r);speak(r)},120)}
+$('send').onclick=send;chatInput.onkeydown=function(e){if(e.key==='Enter')send()};
+mic.onclick=function(){try{mic.classList.add('listen');AndroidBridge.startVoice()}catch(e){mic.classList.remove('listen');addMsg('ai','Voice input unavailable.')}};
+window.onNativeSpeechResult=function(t){mic.classList.remove('listen');chatInput.value=t||'';if(chatInput.value.trim())send()};
+window.onNativeSpeechError=function(t){mic.classList.remove('listen');addMsg('ai',t||'Voice recognition unavailable.')};
+window.onNativeTalking=function(v){talking=!!v};
 
-window.onFullAvatarBuilt=data=>{
- const im=new Image();im.onload=()=>{try{buildGrid(data,im);buildFace(data);buildState.textContent=data.faceDetailed?'Full character + detailed animated face generated.':'Full character generated; use a clearer face photo for facial detail.';$('apply').disabled=false;setPage('chat');msg('ai',data.faceDetailed?'Done. Your full-body avatar and detailed face rig are active.':'Done. The full-body avatar is active, but I could not build the detailed face rig from that crop.');speak('Your full character is ready.')}catch(e){window.onAvatarBuildError(e.message)}};im.onerror=()=>window.onAvatarBuildError('Could not load the generated person texture.');im.src=data.personTexture
+/* ---------------- Babylon rig ---------------- */
+const canvas=$('scene');
+let engine=null,scene=null,camera=null,avatarRoot=null,avatarMeshes=[],avatarSkeleton=null,boneNodes={},boneBase={},faceOverlay=null,faceBase=null,faceMeta=null,faceMap={},sceneReady=false;
+function hexColor(h){try{return BABYLON.Color3.FromHexString(h)}catch(e){return new BABYLON.Color3(.7,.6,.6)}}
+function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
+function ensureScene(){
+  if(sceneReady)return;
+  if(!window.BABYLON){statusText.textContent='3D runtime missing';return}
+  engine=new BABYLON.Engine(canvas,true,{preserveDrawingBuffer:false,stencil:true,disableWebGL2Support:false});
+  scene=new BABYLON.Scene(engine);scene.clearColor=new BABYLON.Color4(.025,.016,.035,1);
+  camera=new BABYLON.ArcRotateCamera('cam',Math.PI/2,Math.PI/2.14,2.55,new BABYLON.Vector3(0,1.0,0),scene);
+  camera.attachControl(canvas,true);camera.lowerRadiusLimit=1.75;camera.upperRadiusLimit=3.8;camera.lowerBetaLimit=.95;camera.upperBetaLimit=1.8;camera.wheelPrecision=80;camera.panningSensibility=0;
+  const hemi=new BABYLON.HemisphericLight('hemi',new BABYLON.Vector3(0,1,0),scene);hemi.intensity=.95;hemi.diffuse=new BABYLON.Color3(.82,.74,1);
+  const key=new BABYLON.DirectionalLight('key',new BABYLON.Vector3(-.4,-1,-.55),scene);key.position=new BABYLON.Vector3(1.4,2.4,2.2);key.intensity=1.45;key.diffuse=new BABYLON.Color3(1,.75,.93);
+  const rim=new BABYLON.PointLight('rim',new BABYLON.Vector3(-1.1,1.55,-1.0),scene);rim.intensity=20;rim.diffuse=new BABYLON.Color3(.35,.35,1);
+  const floor=BABYLON.MeshBuilder.CreateDisc('floor',{radius:1.05,tessellation:72},scene);floor.rotation.x=Math.PI/2;floor.position.y=.005;
+  const fm=new BABYLON.StandardMaterial('floorMat',scene);fm.diffuseColor=new BABYLON.Color3(.05,.02,.08);fm.emissiveColor=new BABYLON.Color3(.13,.025,.18);fm.alpha=.8;floor.material=fm;
+  engine.runRenderLoop(function(){animateRig();scene.render()});
+  window.addEventListener('resize',function(){engine.resize()});
+  window.avatarResize=function(){engine.resize()};
+  sceneReady=true;
+}
+function disposeAvatar(){
+  if(faceOverlay){try{faceOverlay.dispose(false,true)}catch(e){}faceOverlay=null}
+  avatarMeshes.forEach(function(m){try{m.dispose(false,true)}catch(e){}});avatarMeshes=[];avatarRoot=null;avatarSkeleton=null;boneNodes={};boneBase={};
+}
+function normName(s){return(s||'').toLowerCase().replace(/[^a-z0-9]/g,'')}
+function findBone(tokens){
+  if(!avatarSkeleton)return null;let best=null;
+  avatarSkeleton.bones.forEach(function(b){const n=normName(b.name);tokens.forEach(function(t){if(!best&&n.indexOf(t)>=0)best=b})});return best
+}
+function linked(b){if(!b)return null;try{return b.getTransformNode?b.getTransformNode():null}catch(e){return null}}
+function captureBone(key,tokens){
+  const b=findBone(tokens),n=linked(b);if(!n)return;boneNodes[key]=n;
+  if(!n.rotationQuaternion)n.rotationQuaternion=BABYLON.Quaternion.FromEulerAngles(n.rotation.x,n.rotation.y,n.rotation.z);
+  boneBase[key]=n.rotationQuaternion.clone();
+}
+function setupBones(){
+  captureBone('head',['jbipchead','head']);captureBone('neck',['jbipcneck','neck']);
+  captureBone('lua',['jbiplupperarm','leftupperarm','upperarml']);captureBone('rua',['jbiprupperarm','rightupperarm','upperarmr']);
+  captureBone('lla',['jbipllowerarm','leftlowerarm','lowerarml']);captureBone('rla',['jbiprlowerarm','rightlowerarm','lowerarmr']);
+  captureBone('lleg',['jbiplupperleg','leftupperleg','thighl']);captureBone('rleg',['jbiprupperleg','rightupperleg','thighr']);
+}
+function applyDelta(key,x,y,z){
+  const n=boneNodes[key],b=boneBase[key];if(!n||!b)return;
+  const q=BABYLON.Quaternion.FromEulerAngles(x||0,y||0,z||0);n.rotationQuaternion=b.multiply(q)
+}
+function poseMap(data){const p={};(data.pose||[]).forEach(function(r){p[r[0]]={x:r[1],y:r[2],z:r[3],c:r[4]}});return p}
+function dist(a,b){if(!a||!b)return 0;const x=a.x-b.x,y=a.y-b.y;return Math.sqrt(x*x+y*y)}
+function bodyScales(data){
+  const p=poseMap(data),s=dist(p[11],p[12]),h=dist(p[23],p[24]),ankY=((p[27]?p[27].y:.95)+(p[28]?p[28].y:.95))/2,nose=p[0]?p[0].y:.14,bh=Math.max(.45,ankY-nose);
+  const width=clamp((s/bh)/.25,.84,1.18),depth=clamp((h/bh)/.18,.88,1.12);return{w:width,d:depth}
+}
+function tintMaterials(data){
+  if(!scene)return;const skin=hexColor(data.skinColor||'#C79C8B'),hair=hexColor(data.hairColor||'#3A2A2A'),top=hexColor(data.topColor||'#4A4055'),bottom=hexColor(data.bottomColor||'#34333D');
+  scene.materials.forEach(function(m){
+    const n=normName(m.name);let c=null,blend=.42;
+    if(n.indexOf('hair')>=0)c=hair;
+    else if(n.indexOf('face')>=0||n.indexOf('skin')>=0||n.indexOf('body')>=0)c=skin;
+    else if(n.indexOf('top')>=0||n.indexOf('shirt')>=0||n.indexOf('cloth')>=0||n.indexOf('uniform')>=0)c=top;
+    else if(n.indexOf('bottom')>=0||n.indexOf('pant')>=0||n.indexOf('skirt')>=0)c=bottom;
+    if(!c)return;
+    if(m.albedoColor)m.albedoColor=BABYLON.Color3.Lerp(m.albedoColor,c,blend);
+    else if(m.diffuseColor)m.diffuseColor=BABYLON.Color3.Lerp(m.diffuseColor,c,blend)
+  })
+}
+function computeBounds(meshes){
+  let minY=1e9,maxY=-1e9;meshes.forEach(function(m){if(!m.getBoundingInfo)return;try{m.computeWorldMatrix(true);const b=m.getBoundingInfo().boundingBox;minY=Math.min(minY,b.minimumWorld.y);maxY=Math.max(maxY,b.maximumWorld.y)}catch(e){}});
+  if(!isFinite(minY)||!isFinite(maxY)||maxY-minY<.1)return{min:0,max:1.7,height:1.7};return{min:minY,max:maxY,height:maxY-minY}
+}
+async function loadRig(data){
+  ensureScene();disposeAvatar();statusText.textContent='Loading real humanoid rig…';
+  try{
+    const result=await BABYLON.SceneLoader.ImportMeshAsync('','file:///android_asset/','default_avatar.glb',scene,null,'.glb');
+    avatarMeshes=result.meshes||[];avatarSkeleton=(result.skeletons&&result.skeletons[0])||scene.skeletons[0]||null;avatarRoot=avatarMeshes[0]||null;
+    if(!avatarRoot)throw new Error('No avatar root loaded');
+    const b=computeBounds(avatarMeshes),baseScale=1.72/b.height,bs=bodyScales(data);
+    avatarRoot.scaling=new BABYLON.Vector3(baseScale*bs.w,baseScale,baseScale*bs.d);
+    avatarRoot.position.y=-b.min*baseScale+.02;
+    avatarRoot.rotation.y=rigFlipped?Math.PI:0;
+    setupBones();tintMaterials(data);createFaceOverlay(data);avatarReady=true;statusText.textContent='Rigged person active';camera.setTarget(new BABYLON.Vector3(0,1.02,0));camera.radius=2.45;basicNav('companion');
+    addMsg('ai','Your rigged avatar is active. The stock skeleton now carries your body proportions, appearance colours and reconstructed face.');speak('Your rigged avatar is ready.');
+  }catch(e){statusText.textContent='Rig load failed';window.onAvatarBuildError('3D rig failed: '+(e.message||e))}
+}
+function headParent(){return boneNodes.head||avatarRoot}
+function createFaceOverlay(data){
+  const pts=data.frontFace||[],tris=data.frontTriangles||[];if(pts.length<100||tris.length<100)return;
+  const max=Math.max.apply(null,pts.map(function(r){return r[0]})),pos=new Array((max+1)*3).fill(0),uv=new Array((max+1)*2).fill(0),meta=new Array(max+1),idx=[],depthBoost=(data.hasLeftProfile||data.hasRightProfile)?1.22:1.0;
+  pts.forEach(function(r){const i=r[0],u=r[1],v=r[2],z=r[3];pos[i*3]=(u-.5)*.30;pos[i*3+1]=(.5-v)*.39+.015;pos[i*3+2]=.115-z*.24*depthBoost;uv[i*2]=u;uv[i*2+1]=1-v;meta[i]={u:u,v:v}});
+  tris.forEach(function(t){if(t.length>=3)idx.push(t[0],t[1],t[2])});
+  const mesh=new BABYLON.Mesh('identityFace',scene),vd=new BABYLON.VertexData();vd.positions=pos;vd.indices=idx;vd.uvs=uv;vd.applyToMesh(mesh,true);
+  const mat=new BABYLON.StandardMaterial('identityFaceMat',scene),tex=new BABYLON.Texture(currentBuild.front,scene,false,false,BABYLON.Texture.BILINEAR_SAMPLINGMODE);mat.diffuseTexture=tex;mat.specularColor=new BABYLON.Color3(.04,.04,.04);mat.backFaceCulling=false;mat.emissiveColor=new BABYLON.Color3(.05,.03,.05);mesh.material=mat;
+  mesh.parent=headParent();mesh.position=new BABYLON.Vector3(0,.03,.015);faceOverlay=mesh;faceBase=pos.slice();faceMeta=meta;faceMap={};meta.forEach(function(m,i){if(m)faceMap[i]=m})
+}
+function animateFace(t){
+  if(!faceOverlay||!faceBase||!faceMeta)return;const arr=faceBase.slice(),m1=faceMap[13],m2=faceMap[14],mouth=m1&&m2?{u:(m1.u+m2.u)/2,v:(m1.v+m2.v)/2}:{u:.5,v:.68},open=talking?(.5+.5*Math.abs(Math.sin(t*11))):.03;
+  for(let i=0;i<faceMeta.length;i++){const m=faceMeta[i];if(!m)continue;const du=m.u-mouth.u,dv=m.v-mouth.v,d=Math.sqrt(du*du+dv*dv);if(d<.11){const w=1-d/.11,dir=m.v>mouth.v?-1:1;arr[i*3+1]+=dir*open*w*.018}}
+  faceOverlay.updateVerticesData(BABYLON.VertexBuffer.PositionKind,arr,false,false)
+}
+function animateRig(){
+  if(!avatarReady)return;const t=performance.now()/1000,voice=talking?1:0;
+  applyDelta('head',Math.sin(t*.7)*.025,Math.sin(t*.42)*.05,Math.sin(t*.55)*.02);
+  applyDelta('neck',Math.sin(t*.5)*.008,0,Math.sin(t*.45)*.008);
+  applyDelta('lua',0,0,.035*Math.sin(t*.85)-voice*.06*Math.sin(t*4.1));
+  applyDelta('rua',0,0,-.035*Math.sin(t*.85)+voice*.11*Math.sin(t*4.4));
+  applyDelta('lla',0,0,voice*.07*Math.sin(t*5.0));
+  applyDelta('rla',0,0,-voice*.09*Math.sin(t*5.2));
+  applyDelta('lleg',.008*Math.sin(t*.7),0,0);applyDelta('rleg',-.008*Math.sin(t*.7),0,0);animateFace(t)
+}
+$('flipRig').onclick=function(){rigFlipped=!rigFlipped;if(avatarRoot)avatarRoot.rotation.y=rigFlipped?Math.PI:0};
+$('resetView').onclick=function(){if(camera){camera.alpha=Math.PI/2;camera.beta=Math.PI/2.14;camera.radius=2.45;camera.setTarget(new BABYLON.Vector3(0,1.02,0))}};
+
+/* ---------------- build ---------------- */
+$('buildBtn').onclick=async function(){
+  if(!photos.front||!photos.body){buildState.textContent='Front face and full-body photos are required.';return}
+  const front=croppedFront();if(!front){buildState.textContent='Select the front face first.';return}
+  this.disabled=true;buildState.innerHTML='<span class="spinner"></span>Analyzing identity, profiles, body proportions and rig…';
+  const body=await normalized(photos.body,1024),left=await normalized(photos.left,512),right=await normalized(photos.right,512);
+  currentBuild={front:front,body:body,left:left,right:right};
+  try{
+    if(window.AndroidBridge&&AndroidBridge.buildRiggedAvatar)AndroidBridge.buildRiggedAvatar(body,front,left,right);
+    else window.onAvatarBuildError('Native avatar analysis bridge unavailable.');
+  }catch(e){window.onAvatarBuildError(e.message||String(e))}
 };
-window.onAvatarBuildError=t=>{buildState.textContent=t||'Avatar build failed.';$('apply').disabled=false;msg('ai',t||'Avatar build failed.')};
+window.onRiggedAvatarBuilt=function(data){buildState.textContent=(data.hasLeftProfile&&data.hasRightProfile)?'Pro references processed. Building 3D rig…':'Quick references processed. Building 3D rig…';$('buildBtn').disabled=false;loadRig(data)};
+window.onAvatarBuildError=function(t){$('buildBtn').disabled=false;buildState.textContent=t||'Avatar build failed.';statusText.textContent='Avatar needs attention';addMsg('ai',t||'Avatar build failed.')};
 
-$('apply').onclick=()=>{
- if(!loaded){alert('Choose a person photo first.');return}
- faceCanvas=cropFace();if(!faceCanvas)return;$('apply').disabled=true;buildState.innerHTML='<span class="spinner"></span>Detecting body, isolating person and building rig…';
- const full=normalizedFull(),face=faceCanvas.toDataURL('image/jpeg',.93);
- try{if(window.AndroidBridge&&AndroidBridge.buildFullAvatar)AndroidBridge.buildFullAvatar(full,face);else window.onAvatarBuildError('Native avatar engine unavailable.')}catch(e){window.onAvatarBuildError(e.message)}
-};
+ensureScene();
 })();
 </script>
 </body>
