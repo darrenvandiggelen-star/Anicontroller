@@ -24,6 +24,7 @@ import android.webkit.WebViewClient;
 
 import com.google.mlkit.vision.common.InputImage;
 import com.google.mlkit.vision.common.PointF3D;
+import com.google.mlkit.vision.common.Triangle;
 import com.google.mlkit.vision.facemesh.FaceMesh;
 import com.google.mlkit.vision.facemesh.FaceMeshDetection;
 import com.google.mlkit.vision.facemesh.FaceMeshDetector;
@@ -232,6 +233,22 @@ public class MainActivity extends Activity {
         return arr;
     }
 
+    private JSONArray faceTrianglesToJson(FaceMesh mesh) throws Exception {
+        JSONArray arr = new JSONArray();
+        if (mesh == null) return arr;
+
+        for (Triangle<FaceMeshPoint> triangle : mesh.getAllTriangles()) {
+            List<FaceMeshPoint> points = triangle.getAllPoints();
+            if (points.size() < 3) continue;
+            JSONArray row = new JSONArray();
+            row.put(points.get(0).getIndex());
+            row.put(points.get(1).getIndex());
+            row.put(points.get(2).getIndex());
+            arr.put(row);
+        }
+        return arr;
+    }
+
     private void buildFullAvatar(String fullDataUrl, String faceDataUrl) {
         Bitmap full = decodeDataUrl(fullDataUrl, 640);
         Bitmap face = decodeDataUrl(faceDataUrl, 512);
@@ -280,6 +297,7 @@ public class MainActivity extends Activity {
             out.put("personTexture", bitmapToDataUrl(cutout));
             out.put("pose", poseToJson(pose, full.getWidth(), full.getHeight()));
             out.put("face", faceToJson(mesh, face.getWidth(), face.getHeight()));
+            out.put("faceTriangles", faceTrianglesToJson(mesh));
             out.put("faceDetailed", mesh != null);
 
             final String js = "window.onFullAvatarBuilt(" + out.toString() + ")";
