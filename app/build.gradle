@@ -25,7 +25,7 @@ android {
 
 dependencies {
     // Identity / facial geometry - bundled, works offline.
-    implementation 'com.google.mlkit:face-mesh-detection:16.0.0-beta1'
+    implementation 'com.google.mlkit:face-mesh-detection:16.0.0-beta3'
 
     // Full-body 33-point pose model - bundled, works offline.
     implementation 'com.google.mlkit:pose-detection-accurate:18.0.0-beta5'
