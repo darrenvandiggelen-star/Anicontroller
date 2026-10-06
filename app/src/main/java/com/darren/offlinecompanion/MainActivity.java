@@ -733,10 +733,11 @@ public class MainActivity extends Activity {
                 String leftDataUrl,
                 String rightDataUrl) {
             try {
-                buildFaceAvatar(frontDataUrl, leftDataUrl, rightDataUrl);
+                MainActivity.this.buildFaceAvatar(
+                        frontDataUrl, leftDataUrl, rightDataUrl);
             } catch (Throwable t) {
-                jsAvatarError("Face-only bridge failed: " +
-                        (t.getMessage() == null ? t.getClass().getSimpleName() : t.getMessage()));
+                jsAvatarError("Face-only bridge failed [" + t.getClass().getSimpleName() + "]: " +
+                        (t.getMessage() == null ? "no message" : t.getMessage()));
             }
         }
 
@@ -747,10 +748,11 @@ public class MainActivity extends Activity {
                 String leftDataUrl,
                 String rightDataUrl) {
             try {
-                buildRiggedAvatar(fullDataUrl, frontDataUrl, leftDataUrl, rightDataUrl);
+                MainActivity.this.buildRiggedAvatar(
+                        fullDataUrl, frontDataUrl, leftDataUrl, rightDataUrl);
             } catch (Throwable t) {
-                jsAvatarError("Body-photo bridge failed: " +
-                        (t.getMessage() == null ? t.getClass().getSimpleName() : t.getMessage()));
+                jsAvatarError("Body-photo bridge failed [" + t.getClass().getSimpleName() + "]: " +
+                        (t.getMessage() == null ? "no message" : t.getMessage()));
             }
         }
     }
