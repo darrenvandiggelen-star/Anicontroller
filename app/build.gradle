@@ -9,12 +9,27 @@ android {
         applicationId "com.darren.offlinecompanion"
         minSdk 26
         targetSdk 35
-        versionCode 9
-        versionName "0.6.1"
+        versionCode 10
+        versionName "0.7.0"
+    }
+
+    signingConfigs {
+        companionDebug {
+            storeFile file("companion-debug.keystore")
+            storePassword "companion123"
+            keyAlias "companion"
+            keyPassword "companion123"
+        }
     }
 
     buildTypes {
-        release { minifyEnabled false }
+        debug {
+            signingConfig signingConfigs.companionDebug
+        }
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.companionDebug
+        }
     }
 
     compileOptions {
