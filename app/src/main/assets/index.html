@@ -274,7 +274,10 @@ function normalized(url,maxDim){
 }
 
 /* ---------------- chat ---------------- */
-function addMsg(who,text){const d=document.createElement('div');d.className='msg '+who;d.textContent=text;log.appendChild(d);log.scrollTop=log.scrollHeight}
+function addMsg(who,text){
+  const last=log.lastElementChild;if(last&&last.classList.contains(who)&&last.textContent===text)return;
+  const d=document.createElement('div');d.className='msg '+who;d.textContent=text;log.appendChild(d);log.scrollTop=log.scrollHeight
+}
 function localReply(t){const q=t.toLowerCase();if(q.includes('hello')||q==='hi')return "Hey. I'm here.";if(q.includes('avatar')||q.includes('body'))return avatarReady?"This is the rigged avatar generated from your reference set.":"Create a person first in the Creator tab.";if(q.includes('offline'))return "The renderer, rig and vision models are bundled into the APK.";return["Tell me more.","Got it. What should we do next?","I'm following.","Okay. Keep going."][[].slice.call(t).reduce(function(n,c){return n+c.charCodeAt(0)},0)%4]}
 let speechText='',speechStart=0;
 function prepareSpeech(t){speechText=(t||'').toLowerCase().replace(/\s+/g,' ')}
@@ -306,7 +309,7 @@ window.onNativeTalking=function(v){talking=!!v;if(talking)speechStart=performanc
 
 /* ---------------- Babylon rig ---------------- */
 const canvas=$('scene');
-let engine=null,scene=null,camera=null,avatarRoot=null,avatarMeshes=[],avatarSkeleton=null,boneNodes={},boneBase={},faceOverlay=null,faceBase=null,faceMeta=null,faceMap={},sceneReady=false,shadowGen=null;
+let engine=null,scene=null,camera=null,avatarRoot=null,avatarMeshes=[],avatarSkeleton=null,boneNodes={},boneBase={},faceOverlay=null,faceBase=null,faceMeta=null,faceMap={},faceFeatures=null,sceneReady=false,shadowGen=null;
 let motion={name:'idle',start:0,duration:0,persistent:false},avatarRestY=0,avatarRestRotY=0,movementTestTimer=null,rigFlipped=true;
 let bonePose={},lastAnimT=0,blinkNext=0,blinkStart=-1;
 function hexColor(h){try{return BABYLON.Color3.FromHexString(h)}catch(e){return new BABYLON.Color3(.7,.6,.6)}}
@@ -332,7 +335,7 @@ function ensureScene(){
 }
 function disposeAvatar(){
   if(faceOverlay){try{faceOverlay.dispose(false,true)}catch(e){}faceOverlay=null}
-  avatarMeshes.forEach(function(m){try{m.dispose(false,true)}catch(e){}});avatarMeshes=[];avatarRoot=null;avatarSkeleton=null;boneNodes={};boneBase={};bonePose={};lastAnimT=0;blinkNext=0;blinkStart=-1;
+  avatarMeshes.forEach(function(m){try{m.dispose(false,true)}catch(e){}});avatarMeshes=[];avatarRoot=null;avatarSkeleton=null;boneNodes={};boneBase={};bonePose={};faceFeatures=null;lastAnimT=0;blinkNext=0;blinkStart=-1;
 }
 function normName(s){return(s||'').toLowerCase().replace(/[^a-z0-9]/g,'')}
 function findBone(tokens){
@@ -424,42 +427,69 @@ async function loadRig(data){
     setupBones();tintMaterials(data);preparePhotoFaceBase();createFaceOverlay(data);avatarReady=true;
     avatarMeshes.forEach(function(m){try{if(shadowGen&&m&&m.getTotalVertices&&m.getTotalVertices()>0)shadowGen.addShadowCaster(m,true)}catch(e){}});
     const check=boneCheck();statusText.textContent=check.ok?'Premium animation ready':'Rig active • '+check.missing.length+' movement bones missing';camera.setTarget(new BABYLON.Vector3(0,1.02,0));camera.radius=2.45;basicNav('companion');
-    addMsg('ai',data.mode==='faceOnly'?'Your premium face-only avatar is active. The body is generated and your actual photo face drives the animated head.':'Your premium avatar is active with body refinement and your actual photo face driving the animated head.');speak('Your rigged avatar is ready.');
+    speak('Avatar ready.');
   }catch(e){statusText.textContent='Rig load failed';window.onAvatarBuildError('3D rig failed: '+(e.message||e))}
 }
 function headParent(){return boneNodes.head||avatarRoot}
 function createFaceOverlay(data){
-  const pts=data.frontFace||[],tris=data.frontTriangles||[];if(pts.length<100||tris.length<100)return;
-  const max=Math.max.apply(null,pts.map(function(r){return r[0]})),pos=new Array((max+1)*3).fill(0),uv=new Array((max+1)*2).fill(0),meta=new Array(max+1),idx=[],depthBoost=(data.hasLeftProfile||data.hasRightProfile)?1.22:1.0;
-  pts.forEach(function(r){const i=r[0],u=r[1],v=r[2],z=r[3];pos[i*3]=(u-.5)*.315;pos[i*3+1]=(.5-v)*.405+.012;pos[i*3+2]=-.115+z*.24*depthBoost;uv[i*2]=u;uv[i*2+1]=v;meta[i]={u:u,v:v}});
-  tris.forEach(function(t){if(t.length>=3)idx.push(t[0],t[1],t[2])});
-  const mesh=new BABYLON.Mesh('identityFace',scene),vd=new BABYLON.VertexData();vd.positions=pos;vd.indices=idx;vd.uvs=uv;vd.applyToMesh(mesh,true);
+  const pts=data.frontFace||[];if(pts.length<100)return;
+  const lm={};pts.forEach(function(r){lm[r[0]]={u:r[1],v:r[2]}});
+  const C=30,R=38,pos=[],uv=[],idx=[],meta=[];
+  for(let y=0;y<=R;y++){
+    for(let x=0;x<=C;x++){
+      const u=x/C,v=y/R,nx=(u-.5)/.5,ny=(v-.50)/.50;
+      const curve=Math.max(0,1-(nx*nx*.88+ny*ny*.50));
+      pos.push((u-.5)*.305,(.5-v)*.405+.010,-.092-.022*curve);
+      uv.push(u,v);meta.push({u:u,v:v})
+    }
+  }
+  for(let y=0;y<R;y++)for(let x=0;x<C;x++){
+    const i=y*(C+1)+x,a=i,b=i+1,c=i+C+1,d=i+C+2;idx.push(a,c,b,b,c,d)
+  }
+  const mesh=new BABYLON.Mesh('identityFace',scene),vd=new BABYLON.VertexData();
+  vd.positions=pos;vd.indices=idx;vd.uvs=uv;vd.applyToMesh(mesh,true);
   const faceTex=(currentBuild&&currentBuild.faceTexture)||currentBuild.front;
-  const mat=new BABYLON.StandardMaterial('identityFaceMat',scene),tex=new BABYLON.Texture(faceTex,scene,false,true,BABYLON.Texture.BILINEAR_SAMPLINGMODE);mat.diffuseTexture=tex;mat.opacityTexture=tex;mat.useAlphaFromDiffuseTexture=true;mat.specularColor=new BABYLON.Color3(.025,.025,.025);mat.backFaceCulling=false;mat.emissiveColor=new BABYLON.Color3(.025,.018,.025);mesh.material=mat;
-  mesh.parent=headParent();mesh.position=new BABYLON.Vector3(0,.025,-.012);mesh.scaling=new BABYLON.Vector3(1.06,1.06,1.0);faceOverlay=mesh;faceBase=pos.slice();faceMeta=meta;faceMap={};meta.forEach(function(m,i){if(m)faceMap[i]=m});
+  const mat=new BABYLON.StandardMaterial('identityFaceMat',scene),tex=new BABYLON.Texture(faceTex,scene,false,true,BABYLON.Texture.BILINEAR_SAMPLINGMODE);
+  mat.diffuseTexture=tex;mat.opacityTexture=tex;mat.useAlphaFromDiffuseTexture=true;mat.specularColor=new BABYLON.Color3(.018,.018,.018);mat.backFaceCulling=false;mat.emissiveColor=new BABYLON.Color3(.018,.012,.018);mesh.material=mat;
+  mesh.parent=headParent();mesh.position=new BABYLON.Vector3(0,.023,-.018);mesh.scaling=new BABYLON.Vector3(1.05,1.05,1.0);
+  faceOverlay=mesh;faceBase=pos.slice();faceMeta=meta;faceMap=lm;
+  const av=function(ids,axis,fb){let n=0,s=0;ids.forEach(function(i){if(lm[i]){s+=lm[i][axis];n++}});return n?s/n:fb};
+  faceFeatures={
+    le:{u:av([33,133,159,145],'u',.35),v:av([33,133,159,145],'v',.42)},
+    re:{u:av([362,263,386,374],'u',.65),v:av([362,263,386,374],'v',.42)},
+    mouth:{u:av([61,291,13,14],'u',.50),v:av([61,291,13,14],'v',.68)}
+  };
   blinkNext=performance.now()/1000+1.4
 }
-function pointMove(arr,i,dx,dy,dz){if(!faceMap[i])return;arr[i*3]+=(dx||0);arr[i*3+1]+=(dy||0);arr[i*3+2]+=(dz||0)}
-function closeEye(arr,upper,lower,a){
-  if(!faceMap[upper]||!faceMap[lower])return;const uy=faceBase[upper*3+1],ly=faceBase[lower*3+1],mid=(uy+ly)/2;
-  arr[upper*3+1]=uy+(mid-uy)*a;arr[lower*3+1]=ly+(mid-ly)*a
+function deformRegion(arr,feature,rx,ry,fn){
+  if(!feature)return;
+  for(let i=0;i<faceMeta.length;i++){
+    const m=faceMeta[i],dx=(m.u-feature.u)/rx,dy=(m.v-feature.v)/ry,d=dx*dx+dy*dy;
+    if(d>=1)continue;const w=(1-d)*(1-d);fn(i,m,w,dx,dy)
+  }
 }
 function animateFace(t){
   if(!faceOverlay||!faceBase||!faceMeta)return;
   const arr=faceBase.slice();
   if(blinkStart<0&&t>=blinkNext){blinkStart=t;blinkNext=t+2.2+1.8*Math.abs(Math.sin(t*1.731))}
   let blink=0;
-  if(blinkStart>=0){const p=(t-blinkStart)/.19;if(p>=1){blinkStart=-1}else{const q=p<.5?p*2:(1-p)*2;blink=Math.sin(q*Math.PI/2)}}
-  closeEye(arr,159,145,blink);closeEye(arr,158,153,blink*.92);closeEye(arr,160,144,blink*.78);
-  closeEye(arr,386,374,blink);closeEye(arr,385,380,blink*.92);closeEye(arr,387,373,blink*.78);
+  if(blinkStart>=0){const p=(t-blinkStart)/.18;if(p>=1){blinkStart=-1}else{const q=p<.5?p*2:(1-p)*2;blink=Math.sin(q*Math.PI/2)}}
+  [faceFeatures&&faceFeatures.le,faceFeatures&&faceFeatures.re].forEach(function(e){
+    deformRegion(arr,e,.115,.060,function(i,m,w){
+      const targetY=(.5-e.v)*.405+.010;
+      arr[i*3+1]+=(targetY-arr[i*3+1])*blink*w*.72
+    })
+  });
 
-  const v=visemeAt(t),talkPulse=talking?(.55+.45*Math.sin(t*5.7)):0;
-  const open=clamp(v.open*(.78+.22*talkPulse),0,.82),wide=v.wide,round=v.round;
-  pointMove(arr,13,0,open*.017,0);pointMove(arr,14,0,-open*.022,0);pointMove(arr,152,0,-open*.010,0);
-  pointMove(arr,61,-wide*.010+round*.008,(talking?1:0)*.0025,0);pointMove(arr,291,wide*.010-round*.008,(talking?1:0)*.0025,0);
-  pointMove(arr,78,round*.006,0,0);pointMove(arr,308,-round*.006,0,0);
-  const brow=(talking?.0035:.0015)*Math.sin(t*2.3);
-  pointMove(arr,70,0,brow,0);pointMove(arr,300,0,brow,0);pointMove(arr,105,0,brow*.7,0);pointMove(arr,334,0,brow*.7,0);
+  const v=visemeAt(t),pulse=talking?(.78+.22*Math.sin(t*5.7)):0;
+  const open=clamp(v.open*pulse,0,.75),wide=v.wide,round=v.round,mouth=faceFeatures&&faceFeatures.mouth;
+  deformRegion(arr,mouth,.17,.11,function(i,m,w,dx,dy){
+    if(dy>0)arr[i*3+1]-=open*.020*w*Math.min(1,dy);
+    else arr[i*3+1]+=open*.006*w*Math.min(1,-dy);
+    arr[i*3]+=Math.sign(dx)*wide*.006*w;
+    arr[i*3]-=Math.sign(dx)*round*.007*w;
+    arr[i*3+2]-=open*.002*w
+  });
   faceOverlay.updateVerticesData(BABYLON.VertexBuffer.PositionKind,arr,false,false)
 }
 function boneCheck(){
@@ -482,18 +512,18 @@ function motionPose(t){
   const name=motion.name,elapsed=t-motion.start;
   if(!motion.persistent&&motion.duration>0&&elapsed>motion.duration){motion={name:'idle',start:t,duration:0,persistent:false};statusText.textContent='Rigged person active';return p}
   const s=Math.sin(elapsed*6.2),s2=Math.sin(elapsed*3.4);
-  if(name==='waveRight'){add('rua',-.10,0,-1.18);add('rla',0,-.15,-.72+.24*s);add('rhand',0,.22*s,0)}
-  else if(name==='waveLeft'){add('lua',-.10,0,1.18);add('lla',0,.15,.72-.24*s);add('lhand',0,-.22*s,0)}
-  else if(name==='raiseRight'){add('rua',-.06,0,-1.38);add('rla',0,0,-.12)}
-  else if(name==='raiseLeft'){add('lua',-.06,0,1.38);add('lla',0,0,.12)}
-  else if(name==='armsUp'){add('lua',-.10,0,1.32);add('rua',-.10,0,-1.32);add('lla',0,0,.10);add('rla',0,0,-.10)}
+  if(name==='waveRight'){add('rua',-.10,0,-2.18);add('rla',0,-.15,-.78+.24*s);add('rhand',0,.22*s,0)}
+  else if(name==='waveLeft'){add('lua',-.10,0,2.18);add('lla',0,.15,.78-.24*s);add('lhand',0,-.22*s,0)}
+  else if(name==='raiseRight'){add('rua',-.06,0,-2.38);add('rla',0,0,-.12)}
+  else if(name==='raiseLeft'){add('lua',-.06,0,2.38);add('lla',0,0,.12)}
+  else if(name==='armsUp'){add('lua',-.10,0,2.32);add('rua',-.10,0,-2.32);add('lla',0,0,.10);add('rla',0,0,-.10)}
   else if(name==='nod'){add('head',.22*s2,0,0);add('neck',.08*s2,0,0)}
   else if(name==='shakeHead'){add('head',0,.34*s2,0);add('neck',0,.08*s2,0)}
   else if(name==='lookLeft'){add('head',0,.55,0);add('neck',0,.15,0)}
   else if(name==='lookRight'){add('head',0,-.55,0);add('neck',0,-.15,0)}
   else if(name==='bow'){add('hips',.08,0,0);add('spine',.25,0,0);add('chest',.28,0,0);add('head',-.10,0,0)}
   else if(name==='sit'){add('hips',-.10,0,0);add('spine',-.08,0,0);add('lleg',1.05,0,.05);add('rleg',1.05,0,-.05);add('lknee',-1.45,0,0);add('rknee',-1.45,0,0)}
-  else if(name==='dance'){add('hips',0,.20*s2,.16*s);add('chest',0,-.14*s2,-.12*s);add('lua',0,0,.55+.40*s);add('rua',0,0,-.55-.40*s);add('lla',0,0,.30*s2);add('rla',0,0,-.30*s2);add('lleg',.16*Math.max(0,s),0,.06);add('rleg',.16*Math.max(0,-s),0,-.06)}
+  else if(name==='dance'){add('hips',0,.20*s2,.16*s);add('chest',0,-.14*s2,-.12*s);add('lua',0,0,1.10+.55*s);add('rua',0,0,-1.10-.55*s);add('lla',0,0,.30*s2);add('rla',0,0,-.30*s2);add('lleg',.16*Math.max(0,s),0,.06);add('rleg',.16*Math.max(0,-s),0,-.06)}
   else if(name==='walk'){add('lleg',.34*s,0,0);add('rleg',-.34*s,0,0);add('lknee',-.26*Math.max(0,-s),0,0);add('rknee',-.26*Math.max(0,s),0,0);add('lua',0,0,-.20*s);add('rua',0,0,-.20*s)}
   return p
 }
@@ -537,12 +567,13 @@ function premiumIdlePose(t,voice){
   p.upperChest=[.010*breath,.006*micro,.007*sway];
   p.neck=[.006*micro,.012*Math.sin(t*.31),.006*sway];
   p.head=[.018*Math.sin(t*.58),.035*Math.sin(t*.27)+.012*Math.sin(t*1.1),.012*Math.sin(t*.47)];
-  p.lua=[0,0,.025*sway-voice*(.05+.035*Math.sin(t*2.6))];
-  p.rua=[0,0,-.025*sway+voice*(.07+.045*Math.sin(t*2.2+1))];
-  p.lla=[0,0,voice*.045*Math.sin(t*3.4)];
-  p.rla=[0,0,-voice*.055*Math.sin(t*3.1+1)];
-  p.lleg=[.006*sway,0,0];p.rleg=[-.006*sway,0,0];
-  const gazeYaw=.055*Math.sin(t*.29)+.018*Math.sin(t*.83),gazePitch=.025*Math.sin(t*.37+1);
+  p.lua=[0,0,-1.05+.020*sway-voice*.035*Math.sin(t*2.6)];
+  p.rua=[0,0,1.05-.020*sway+voice*.045*Math.sin(t*2.2+1)];
+  p.lla=[.08,0,.04+voice*.030*Math.sin(t*3.4)];
+  p.rla=[.08,0,-.04-voice*.035*Math.sin(t*3.1+1)];
+  p.lhand=[0,.03*Math.sin(t*.5),.02];p.rhand=[0,-.03*Math.sin(t*.5),-.02];
+  p.lleg=[.006*sway,0,.015];p.rleg=[-.006*sway,0,-.015];
+  const gazeYaw=.040*Math.sin(t*.29)+.015*Math.sin(t*.83),gazePitch=.020*Math.sin(t*.37+1);
   p.leye=[gazePitch,gazeYaw,0];p.reye=[gazePitch,gazeYaw,0];
   return p
 }
