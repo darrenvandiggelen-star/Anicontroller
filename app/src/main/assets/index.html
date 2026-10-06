@@ -130,12 +130,13 @@ drawPhoto();
 const log=$('log'),input=$('input'),mic=$('mic'),charStatus=$('charStatus');let talking=false,avatarReady=false;
 function msg(w,t){const d=document.createElement('div');d.className='msg '+w;d.textContent=t;log.appendChild(d);log.scrollTop=log.scrollHeight}
 function localReply(t){const q=t.toLowerCase();if(q.includes('hello')||q==='hi')return "Hey. I'm here.";if(q.includes('avatar')||q.includes('body'))return avatarReady?"This character is rigged from the person you uploaded.":"Open Create and build the character from a person photo.";if(q.includes('offline'))return "The body, segmentation and face models are bundled inside this app.";return ["Tell me more.","I'm following. What should we do next?","Got it.","Okay. Keep going."][[...t].reduce((n,c)=>n+c.charCodeAt(0),0)%4]}
-function speak(t){try{if(window.AndroidBridge&&AndroidBridge.speak){talking=true;AndroidBridge.speak(t);setTimeout(()=>talking=false,Math.max(1100,t.length*48))}}catch(e){}}
+function speak(t){try{if(window.AndroidBridge&&AndroidBridge.speak){talking=true;AndroidBridge.speak(t);setTimeout(()=>{if(talking)talking=false},Math.max(2500,t.length*85))}}catch(e){}}
 function send(){const t=input.value.trim();if(!t)return;input.value='';msg('me',t);setTimeout(()=>{const r=localReply(t);msg('ai',r);speak(r)},140)}
 $('send').onclick=send;input.onkeydown=e=>{if(e.key==='Enter')send()};
 mic.onclick=()=>{try{mic.classList.add('listen');AndroidBridge.startVoice()}catch(e){mic.classList.remove('listen');msg('ai','Voice input is unavailable.')}}
 window.onNativeSpeechResult=t=>{mic.classList.remove('listen');input.value=t||'';if(input.value.trim())send()};
 window.onNativeSpeechError=t=>{mic.classList.remove('listen');msg('ai',t||'Voice recognition unavailable.')};
+window.onNativeTalking=v=>{talking=!!v};
 
 /* ---------- Full body + detailed face WebGL character ---------- */
 const gc=$('gl'),gl=gc.getContext('webgl',{alpha:true,antialias:true,premultipliedAlpha:true});
