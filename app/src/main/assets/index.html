@@ -434,13 +434,16 @@ function headParent(){return boneNodes.head||avatarRoot}
 function createFaceOverlay(data){
   const pts=data.frontFace||[];if(pts.length<100)return;
   const lm={};pts.forEach(function(r){lm[r[0]]={u:r[1],v:r[2]}});
+  const us=pts.map(function(r){return r[1]}),vs=pts.map(function(r){return r[2]});
+  let u0=Math.max(0,Math.min.apply(null,us)-.075),u1=Math.min(1,Math.max.apply(null,us)+.075);
+  let v0=Math.max(0,Math.min.apply(null,vs)-.095),v1=Math.min(1,Math.max.apply(null,vs)+.085);
   const C=30,R=38,pos=[],uv=[],idx=[],meta=[];
   for(let y=0;y<=R;y++){
     for(let x=0;x<=C;x++){
       const u=x/C,v=y/R,nx=(u-.5)/.5,ny=(v-.50)/.50;
-      const curve=Math.max(0,1-(nx*nx*.88+ny*ny*.50));
-      pos.push((u-.5)*.305,(.5-v)*.405+.010,-.092-.022*curve);
-      uv.push(u,v);meta.push({u:u,v:v})
+      const curve=Math.max(0,1-(nx*nx*.90+ny*ny*.56));
+      pos.push((u-.5)*.285,(.5-v)*.365+.008,-.090-.018*curve);
+      uv.push(u0+u*(u1-u0),v0+v*(v1-v0));meta.push({u:u,v:v})
     }
   }
   for(let y=0;y<R;y++)for(let x=0;x<C;x++){
@@ -449,9 +452,9 @@ function createFaceOverlay(data){
   const mesh=new BABYLON.Mesh('identityFace',scene),vd=new BABYLON.VertexData();
   vd.positions=pos;vd.indices=idx;vd.uvs=uv;vd.applyToMesh(mesh,true);
   const faceTex=(currentBuild&&currentBuild.faceTexture)||currentBuild.front;
-  const mat=new BABYLON.StandardMaterial('identityFaceMat',scene),tex=new BABYLON.Texture(faceTex,scene,false,true,BABYLON.Texture.BILINEAR_SAMPLINGMODE);
+  const mat=new BABYLON.StandardMaterial('identityFaceMat',scene),tex=new BABYLON.Texture(faceTex,scene,false,false,BABYLON.Texture.BILINEAR_SAMPLINGMODE);
   mat.diffuseTexture=tex;mat.opacityTexture=tex;mat.useAlphaFromDiffuseTexture=true;mat.specularColor=new BABYLON.Color3(.018,.018,.018);mat.backFaceCulling=false;mat.emissiveColor=new BABYLON.Color3(.018,.012,.018);mesh.material=mat;
-  mesh.parent=headParent();mesh.position=new BABYLON.Vector3(0,.023,-.018);mesh.scaling=new BABYLON.Vector3(1.05,1.05,1.0);
+  mesh.parent=headParent();mesh.position=new BABYLON.Vector3(0,.020,-.016);mesh.scaling=new BABYLON.Vector3(.94,.94,1.0);
   faceOverlay=mesh;faceBase=pos.slice();faceMeta=meta;faceMap=lm;
   const av=function(ids,axis,fb){let n=0,s=0;ids.forEach(function(i){if(lm[i]){s+=lm[i][axis];n++}});return n?s/n:fb};
   faceFeatures={
@@ -512,11 +515,11 @@ function motionPose(t){
   const name=motion.name,elapsed=t-motion.start;
   if(!motion.persistent&&motion.duration>0&&elapsed>motion.duration){motion={name:'idle',start:t,duration:0,persistent:false};statusText.textContent='Rigged person active';return p}
   const s=Math.sin(elapsed*6.2),s2=Math.sin(elapsed*3.4);
-  if(name==='waveRight'){add('rua',-.10,0,-2.18);add('rla',0,-.15,-.78+.24*s);add('rhand',0,.22*s,0)}
-  else if(name==='waveLeft'){add('lua',-.10,0,2.18);add('lla',0,.15,.78-.24*s);add('lhand',0,-.22*s,0)}
-  else if(name==='raiseRight'){add('rua',-.06,0,-2.38);add('rla',0,0,-.12)}
-  else if(name==='raiseLeft'){add('lua',-.06,0,2.38);add('lla',0,0,.12)}
-  else if(name==='armsUp'){add('lua',-.10,0,2.32);add('rua',-.10,0,-2.32);add('lla',0,0,.10);add('rla',0,0,-.10)}
+  if(name==='waveRight'){add('rua',-.10,0,-2.22);add('rla',0,-.15,-.78+.24*s);add('rhand',0,.22*s,0)}
+  else if(name==='waveLeft'){add('lua',-.10,0,2.22);add('lla',0,.15,.78-.24*s);add('lhand',0,-.22*s,0)}
+  else if(name==='raiseRight'){add('rua',-.06,0,-2.48);add('rla',0,0,-.12)}
+  else if(name==='raiseLeft'){add('lua',-.06,0,2.48);add('lla',0,0,.12)}
+  else if(name==='armsUp'){add('lua',-.10,0,2.42);add('rua',-.10,0,-2.42);add('lla',0,0,.10);add('rla',0,0,-.10)}
   else if(name==='nod'){add('head',.22*s2,0,0);add('neck',.08*s2,0,0)}
   else if(name==='shakeHead'){add('head',0,.34*s2,0);add('neck',0,.08*s2,0)}
   else if(name==='lookLeft'){add('head',0,.55,0);add('neck',0,.15,0)}
@@ -567,8 +570,8 @@ function premiumIdlePose(t,voice){
   p.upperChest=[.010*breath,.006*micro,.007*sway];
   p.neck=[.006*micro,.012*Math.sin(t*.31),.006*sway];
   p.head=[.018*Math.sin(t*.58),.035*Math.sin(t*.27)+.012*Math.sin(t*1.1),.012*Math.sin(t*.47)];
-  p.lua=[0,0,-1.05+.020*sway-voice*.035*Math.sin(t*2.6)];
-  p.rua=[0,0,1.05-.020*sway+voice*.045*Math.sin(t*2.2+1)];
+  p.lua=[0,0,1.10+.018*sway-voice*.030*Math.sin(t*2.6)];
+  p.rua=[0,0,-1.10-.018*sway+voice*.040*Math.sin(t*2.2+1)];
   p.lla=[.08,0,.04+voice*.030*Math.sin(t*3.4)];
   p.rla=[.08,0,-.04-voice*.035*Math.sin(t*3.1+1)];
   p.lhand=[0,.03*Math.sin(t*.5),.02];p.rhand=[0,-.03*Math.sin(t*.5),-.02];
