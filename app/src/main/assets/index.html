@@ -61,7 +61,7 @@ main{min-height:0}.page{height:100%;display:none}.page.active{display:block}
 <div id="app">
 <header>
  <div class="brand"><span class="orb"></span><b>NEON COMPANION</b><span class="offline">OFFLINE</span></div>
- <div class="tabs"><button id="chatTab" class="active">Companion</button><button id="avatarTab">Create</button></div>
+ <div class="tabs"><button id="chatTab" class="active" onclick="basicNav('chat')">Companion</button><button id="avatarTab" onclick="basicNav('avatar')">Create</button></div>
 </header>
 <main>
 <section id="chat" class="page active">
@@ -85,6 +85,27 @@ main{min-height:0}.page{height:100%;display:none}.page.active{display:block}
 </main>
 </div>
 
+<script>
+window.basicNav=function(name){
+  try{
+    var chat=document.getElementById('chat');
+    var avatar=document.getElementById('avatar');
+    var chatTab=document.getElementById('chatTab');
+    var avatarTab=document.getElementById('avatarTab');
+    var isChat=name==='chat';
+    if(chat) chat.classList.toggle('active',isChat);
+    if(avatar) avatar.classList.toggle('active',!isChat);
+    if(chatTab) chatTab.classList.toggle('active',isChat);
+    if(avatarTab) avatarTab.classList.toggle('active',!isChat);
+  }catch(e){}
+};
+window.addEventListener('error',function(e){
+  try{
+    var s=document.getElementById('charStatus');
+    if(s) s.textContent='UI error: '+(e.message||'unknown');
+  }catch(_){}
+});
+</script>
 <script>
 (()=>{
 const $=id=>document.getElementById(id);
@@ -230,8 +251,6 @@ function frame(t){if(gl){gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT|gl.
 
 window.onFullAvatarBuilt=data=>{
  const im=new Image();im.onload=()=>{try{buildGrid(data,im);buildFace(data);buildState.textContent=data.faceDetailed?'Full character + detailed animated face generated.':'Full character generated; use a clearer face photo for facial detail.';$('apply').disabled=false;setPage('chat');msg('ai',data.faceDetailed?'Done. Your full-body avatar and detailed face rig are active.':'Done. The full-body avatar is active, but I could not build the detailed face rig from that crop.');speak('Your full character is ready.')}catch(e){window.onAvatarBuildError(e.message)}};im.onerror=()=>window.onAvatarBuildError('Could not load the generated person texture.');im.src=data.personTexture
-};
-window.onAvatarBuildError(e.message)}};im.onerror=()=>window.onAvatarBuildError('Could not load the generated person texture.');im.src=data.personTexture
 };
 window.onAvatarBuildError=t=>{buildState.textContent=t||'Avatar build failed.';$('apply').disabled=false;msg('ai',t||'Avatar build failed.')};
 
