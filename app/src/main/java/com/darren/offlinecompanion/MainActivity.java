@@ -466,6 +466,8 @@ public class MainActivity extends Activity {
 
             out.put("skinColor", colorHex(sampleAverageColor(front, .5f, .58f, .12f)));
             out.put("hairColor", colorHex(sampleAverageColor(front, .5f, .16f, .15f)));
+            out.put("topColor", colorHex(sampleAverageColor(full, .5f, .43f, .09f)));
+            out.put("bottomColor", colorHex(sampleAverageColor(full, .5f, .69f, .09f)));
 
             final String js = "window.onRiggedAvatarBuilt(" + out.toString() + ")";
             runOnUiThread(() -> webView.evaluateJavascript(js, null));
