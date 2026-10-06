@@ -104,39 +104,82 @@ public class MainActivity extends Activity {
 
         webView.addJavascriptInterface(new AndroidBridge(), "AndroidBridge");
 
-        faceMeshDetector = FaceMeshDetection.getClient(
-                new FaceMeshDetectorOptions.Builder()
-                        .setUseCase(FaceMeshDetectorOptions.FACE_MESH)
-                        .build());
-
-        AccuratePoseDetectorOptions poseOptions =
-                new AccuratePoseDetectorOptions.Builder()
-                        .setDetectorMode(AccuratePoseDetectorOptions.SINGLE_IMAGE_MODE)
-                        .build();
-        poseDetector = PoseDetection.getClient(poseOptions);
-
-        SelfieSegmenterOptions segmentOptions =
-                new SelfieSegmenterOptions.Builder()
-                        .setDetectorMode(SelfieSegmenterOptions.SINGLE_IMAGE_MODE)
-                        .build();
-        segmenter = Segmentation.getClient(segmentOptions);
-
-        tts = new TextToSpeech(this, status -> {
-            if (status == TextToSpeech.SUCCESS) {
-                int result = tts.setLanguage(new Locale("en", "ZA"));
-                if (result == TextToSpeech.LANG_MISSING_DATA ||
-                        result == TextToSpeech.LANG_NOT_SUPPORTED) {
-                    tts.setLanguage(Locale.US);
-                }
-                tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
-                    @Override public void onStart(String utteranceId) { jsTalking(true); }
-                    @Override public void onDone(String utteranceId) { jsTalking(false); }
-                    @Override public void onError(String utteranceId) { jsTalking(false); }
-                });
-            }
-        });
-
         webView.loadUrl("file:///android_asset/index.html");
+    }
+
+    private boolean ensureVisionEngines() {
+        try {
+            if (faceMeshDetector == null) {
+                faceMeshDetector = FaceMeshDetection.getClient(
+                        new FaceMeshDetectorOptions.Builder()
+                                .setUseCase(FaceMeshDetectorOptions.FACE_MESH)
+                                .build());
+            }
+
+            if (poseDetector == null) {
+                AccuratePoseDetectorOptions poseOptions =
+                        new AccuratePoseDetectorOptions.Builder()
+                                .setDetectorMode(AccuratePoseDetectorOptions.SINGLE_IMAGE_MODE)
+                                .build();
+                poseDetector = PoseDetection.getClient(poseOptions);
+            }
+
+            if (segmenter == null) {
+                SelfieSegmenterOptions segmentOptions =
+                        new SelfieSegmenterOptions.Builder()
+                                .setDetectorMode(SelfieSegmenterOptions.SINGLE_IMAGE_MODE)
+                                .build();
+                segmenter = Segmentation.getClient(segmentOptions);
+            }
+
+            return true;
+        } catch (Throwable t) {
+            jsAvatarError("Avatar engine could not start on this device: " +
+                    (t.getMessage() == null ? t.getClass().getSimpleName() : t.getMessage()));
+            return false;
+        }
+    }
+
+    private void ensureTtsAndSpeak(String text) {
+        if (text == null || text.trim().isEmpty()) return;
+
+        try {
+            if (tts == null) {
+                tts = new TextToSpeech(this, status -> {
+                    if (status == TextToSpeech.SUCCESS) {
+                        try {
+                            int result = tts.setLanguage(new Locale("en", "ZA"));
+                            if (result == TextToSpeech.LANG_MISSING_DATA ||
+                                    result == TextToSpeech.LANG_NOT_SUPPORTED) {
+                                tts.setLanguage(Locale.US);
+                            }
+                            tts.setOnUtteranceProgressListener(
+                                    new UtteranceProgressListener() {
+                                        @Override public void onStart(String utteranceId) {
+                                            jsTalking(true);
+                                        }
+                                        @Override public void onDone(String utteranceId) {
+                                            jsTalking(false);
+                                        }
+                                        @Override public void onError(String utteranceId) {
+                                            jsTalking(false);
+                                        }
+                                    });
+                            tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "companion_reply");
+                        } catch (Throwable ignored) {
+                            jsTalking(false);
+                        }
+                    } else {
+                        jsTalking(false);
+                    }
+                });
+            } else {
+                tts.stop();
+                tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "companion_reply");
+            }
+        } catch (Throwable t) {
+            jsTalking(false);
+        }
     }
 
     private Bitmap decodeDataUrl(String dataUrl, int maxDimension) {
@@ -256,6 +299,8 @@ public class MainActivity extends Activity {
     }
 
     private void buildFullAvatar(String fullDataUrl, String faceDataUrl) {
+        if (!ensureVisionEngines()) return;
+
         Bitmap full = decodeDataUrl(fullDataUrl, 640);
         Bitmap face = decodeDataUrl(faceDataUrl, 512);
 
@@ -427,16 +472,7 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public void speak(String text) {
-            runOnUiThread(() -> {
-                if (tts != null && text != null && !text.trim().isEmpty()) {
-                    tts.stop();
-                    tts.speak(
-                            text,
-                            TextToSpeech.QUEUE_FLUSH,
-                            null,
-                            "companion_reply");
-                }
-            });
+            runOnUiThread(() -> ensureTtsAndSpeak(text));
         }
 
         @JavascriptInterface
@@ -455,7 +491,7 @@ public class MainActivity extends Activity {
     protected void onDestroy() {
         if (recognizer != null) recognizer.destroy();
         if (faceMeshDetector != null) {
-            try { faceMeshDetector.close(); } catch (Exception ignored) {}
+            try { faceMeshDetector.close(); } catch (Throwable ignored) {}
         }
         if (poseDetector != null) {
             try { poseDetector.close(); } catch (Exception ignored) {}
