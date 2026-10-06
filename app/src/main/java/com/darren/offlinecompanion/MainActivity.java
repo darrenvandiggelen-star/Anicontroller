@@ -109,7 +109,7 @@ public class MainActivity extends Activity {
         webView.loadUrl("file:///android_asset/index.html");
     }
 
-    private boolean ensureVisionEngines() {
+    private boolean ensureFaceEngine() {
         try {
             if (faceMeshDetector == null) {
                 faceMeshDetector = FaceMeshDetection.getClient(
@@ -117,7 +117,17 @@ public class MainActivity extends Activity {
                                 .setUseCase(FaceMeshDetectorOptions.FACE_MESH)
                                 .build());
             }
+            return true;
+        } catch (Throwable t) {
+            jsAvatarError("Face engine could not start: " +
+                    (t.getMessage() == null ? t.getClass().getSimpleName() : t.getMessage()));
+            return false;
+        }
+    }
 
+    private boolean ensureVisionEngines() {
+        if (!ensureFaceEngine()) return false;
+        try {
             if (poseDetector == null) {
                 AccuratePoseDetectorOptions poseOptions =
                         new AccuratePoseDetectorOptions.Builder()
@@ -136,7 +146,7 @@ public class MainActivity extends Activity {
 
             return true;
         } catch (Throwable t) {
-            jsAvatarError("Avatar engine could not start on this device: " +
+            jsAvatarError("Body engine could not start: " +
                     (t.getMessage() == null ? t.getClass().getSimpleName() : t.getMessage()));
             return false;
         }
@@ -304,14 +314,132 @@ public class MainActivity extends Activity {
         return (meshes == null || meshes.isEmpty()) ? null : meshes.get(0);
     }
 
+    private void buildFaceAvatar(
+            String frontDataUrl,
+            String leftDataUrl,
+            String rightDataUrl) {
+        try {
+            if (!ensureFaceEngine()) return;
+
+            Bitmap front = decodeDataUrl(frontDataUrl, 512);
+            Bitmap left = decodeDataUrl(leftDataUrl, 512);
+            Bitmap right = decodeDataUrl(rightDataUrl, 512);
+
+            if (front == null) {
+                jsAvatarError("A clear front face photo is required.");
+                return;
+            }
+
+            faceMeshDetector.process(InputImage.fromBitmap(front, 0))
+                    .addOnSuccessListener(frontMeshes -> {
+                        FaceMesh frontMesh = firstMesh(frontMeshes);
+                        if (frontMesh == null) {
+                            jsAvatarError("No clear face found. Try a straight-on photo with the full face visible.");
+                            return;
+                        }
+                        processFaceOnlyProfiles(front, left, right, frontMesh);
+                    })
+                    .addOnFailureListener(e ->
+                            jsAvatarError("Face analysis failed: " + e.getMessage()));
+        } catch (Throwable t) {
+            jsAvatarError("Face-only avatar failed: " +
+                    (t.getMessage() == null ? t.getClass().getSimpleName() : t.getMessage()));
+        }
+    }
+
+    private void processFaceOnlyProfiles(
+            Bitmap front,
+            Bitmap left,
+            Bitmap right,
+            FaceMesh frontMesh) {
+
+        if (left == null && right == null) {
+            sendFaceAvatarResult(front, frontMesh, null, null);
+            return;
+        }
+
+        if (left != null) {
+            faceMeshDetector.process(InputImage.fromBitmap(left, 0))
+                    .addOnSuccessListener(leftMeshes -> {
+                        FaceMesh leftMesh = firstMesh(leftMeshes);
+                        if (right != null) {
+                            faceMeshDetector.process(InputImage.fromBitmap(right, 0))
+                                    .addOnSuccessListener(rightMeshes ->
+                                            sendFaceAvatarResult(
+                                                    front, frontMesh,
+                                                    leftMesh, firstMesh(rightMeshes)))
+                                    .addOnFailureListener(e ->
+                                            sendFaceAvatarResult(front, frontMesh, leftMesh, null));
+                        } else {
+                            sendFaceAvatarResult(front, frontMesh, leftMesh, null);
+                        }
+                    })
+                    .addOnFailureListener(e -> {
+                        if (right != null) {
+                            faceMeshDetector.process(InputImage.fromBitmap(right, 0))
+                                    .addOnSuccessListener(rightMeshes ->
+                                            sendFaceAvatarResult(
+                                                    front, frontMesh,
+                                                    null, firstMesh(rightMeshes)))
+                                    .addOnFailureListener(err ->
+                                            sendFaceAvatarResult(front, frontMesh, null, null));
+                        } else {
+                            sendFaceAvatarResult(front, frontMesh, null, null);
+                        }
+                    });
+        } else {
+            faceMeshDetector.process(InputImage.fromBitmap(right, 0))
+                    .addOnSuccessListener(rightMeshes ->
+                            sendFaceAvatarResult(
+                                    front, frontMesh,
+                                    null, firstMesh(rightMeshes)))
+                    .addOnFailureListener(e ->
+                            sendFaceAvatarResult(front, frontMesh, null, null));
+        }
+    }
+
+    private void sendFaceAvatarResult(
+            Bitmap front,
+            FaceMesh frontMesh,
+            FaceMesh leftMesh,
+            FaceMesh rightMesh) {
+        try {
+            JSONObject out = new JSONObject();
+            out.put("mode", "faceOnly");
+            out.put("pose", new JSONArray());
+            out.put("frontFace", faceToJson(frontMesh, front.getWidth(), front.getHeight()));
+            out.put("frontTriangles", faceTrianglesToJson(frontMesh));
+            out.put("leftFace", leftMesh == null
+                    ? new JSONArray()
+                    : faceToJson(leftMesh, 512, 512));
+            out.put("rightFace", rightMesh == null
+                    ? new JSONArray()
+                    : faceToJson(rightMesh, 512, 512));
+            out.put("hasLeftProfile", leftMesh != null);
+            out.put("hasRightProfile", rightMesh != null);
+
+            out.put("skinColor", colorHex(sampleAverageColor(front, .5f, .58f, .12f)));
+            out.put("hairColor", colorHex(sampleAverageColor(front, .5f, .16f, .15f)));
+            out.put("topColor", "#3F354B");
+            out.put("bottomColor", "#292934");
+
+            final String js = "window.onFaceAvatarBuilt(" + out.toString() + ")";
+            runOnUiThread(() -> webView.evaluateJavascript(js, null));
+        } catch (Throwable t) {
+            jsAvatarError("Face avatar assembly failed: " +
+                    (t.getMessage() == null ? t.getClass().getSimpleName() : t.getMessage()));
+        }
+    }
+
     private void buildRiggedAvatar(
             String fullDataUrl,
             String frontDataUrl,
             String leftDataUrl,
             String rightDataUrl) {
-        if (!ensureVisionEngines()) return;
+        try {
+            if (!ensureVisionEngines()) return;
 
-        Bitmap full = decodeDataUrl(fullDataUrl, 768);
+            Bitmap full = decodeDataUrl(fullDataUrl, 768);
         Bitmap front = decodeDataUrl(frontDataUrl, 512);
         Bitmap left = decodeDataUrl(leftDataUrl, 512);
         Bitmap right = decodeDataUrl(rightDataUrl, 512);
@@ -345,6 +473,10 @@ public class MainActivity extends Activity {
                                         jsAvatarError("Person cut-out failed: " + e.getMessage())))
                 .addOnFailureListener(e ->
                         jsAvatarError("Full-body detection failed: " + e.getMessage()));
+        } catch (Throwable t) {
+            jsAvatarError("Rigged avatar failed: " +
+                    (t.getMessage() == null ? t.getClass().getSimpleName() : t.getMessage()));
+        }
     }
 
     private void processOptionalProfiles(
@@ -449,6 +581,7 @@ public class MainActivity extends Activity {
             Bitmap cutout = applySegmentation(full, mask);
 
             JSONObject out = new JSONObject();
+            out.put("mode", "bodyPhoto");
             out.put("width", full.getWidth());
             out.put("height", full.getHeight());
             out.put("personTexture", bitmapToDataUrl(cutout));
@@ -595,12 +728,30 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public void buildFaceAvatar(
+                String frontDataUrl,
+                String leftDataUrl,
+                String rightDataUrl) {
+            try {
+                buildFaceAvatar(frontDataUrl, leftDataUrl, rightDataUrl);
+            } catch (Throwable t) {
+                jsAvatarError("Face-only bridge failed: " +
+                        (t.getMessage() == null ? t.getClass().getSimpleName() : t.getMessage()));
+            }
+        }
+
+        @JavascriptInterface
         public void buildRiggedAvatar(
                 String fullDataUrl,
                 String frontDataUrl,
                 String leftDataUrl,
                 String rightDataUrl) {
-            buildRiggedAvatar(fullDataUrl, frontDataUrl, leftDataUrl, rightDataUrl);
+            try {
+                buildRiggedAvatar(fullDataUrl, frontDataUrl, leftDataUrl, rightDataUrl);
+            } catch (Throwable t) {
+                jsAvatarError("Body-photo bridge failed: " +
+                        (t.getMessage() == null ? t.getClass().getSimpleName() : t.getMessage()));
+            }
         }
     }
 
